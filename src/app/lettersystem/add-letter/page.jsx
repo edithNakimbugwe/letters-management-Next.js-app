@@ -1,6 +1,330 @@
 'use client';
+import { useState } from 'react';
+import { createWorker } from 'tesseract.js';
 
 export default function AddLetterPage() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [formData, setFormData] = useState({
+    date: '',
+    title: '',
+    from: '',
+    to: '',
+    contact: '',
+    urgency: ''
+  });
+  const [processing, setProcessing] = useState(false);
+
+  const convertPdfToImages = async (file) => {
+    try {
+      // For this example, we'll just process the first page
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      
+      const scale = 2.0;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      
+      // Set canvas dimensions
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      
+      // Render PDF page to canvas
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+      
+      // Convert canvas to blob
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(URL.createObjectURL(blob));
+          } else {
+            reject(new Error('Failed to convert canvas to blob'));
+          }
+        }, 'image/png');
+      });
+    } catch (error) {
+      console.error('PDF conversion error:', error);
+      throw error;
+    }
+  };
+
+  const createImageFromFile = async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = event.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const performOCR = async (file) => {
+    try {
+      setProcessing(true);
+      let text;
+
+      const worker = await createWorker({
+        logger: m => console.log(m)
+      });
+      
+      await worker.load();
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
+
+      let imageSource;
+      if (file.type === 'application/pdf') {
+        imageSource = await convertPdfToImages(file);
+      } else {
+        // For image files, create an image element
+        const blob = new Blob([file], { type: file.type });
+        imageSource = await createImageFromFile(file);
+      }
+
+      console.log('Processing image for OCR...');
+      const result = await worker.recognize(imageSource);
+      text = result.data.text;
+      
+      console.log('OCR Result:', text);
+
+      if (!text || typeof text !== 'string') {
+        throw new Error('OCR failed to extract text from the image');
+      }
+
+      await worker.terminate();
+      
+      console.log('Extracted Text:', text); // Debug log for extracted text
+
+      // Extract information using patterns
+      const extractedData = {
+        date: extractDate(text),
+        title: extractTitle(text),
+        from: extractFrom(text),
+        to: extractTo(text),
+        contact: extractContact(text),
+        urgency: determineUrgency(text)
+      };
+
+      console.log('Extracted Data:', extractedData); // Debug log
+
+      // Only update fields that have valid data
+      setFormData(prevData => ({
+        ...prevData,
+        ...Object.fromEntries(
+          Object.entries(extractedData).filter(([_, value]) => value)
+        )
+      }));
+    } catch (error) {
+      console.error('OCR Error:', error);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Helper functions to extract specific information
+  const extractDate = (text) => {
+    if (!text || typeof text !== 'string') {
+      console.log('Invalid text input for date extraction');
+      return '';
+    }
+
+    const datePatterns = [
+      /\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b/,  // dd/mm/yyyy or dd-mm-yyyy
+      /\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/,     // yyyy/mm/dd or yyyy-mm-dd
+      /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4}\b/i  // Month dd, yyyy
+    ];
+
+    try {
+      for (const pattern of datePatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const date = new Date(match[0]);
+          if (!isNaN(date.getTime())) {
+            return date.toISOString().split('T')[0];
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Date extraction error:', e);
+    }
+    return '';
+  };
+
+  const extractTitle = (text) => {
+    if (!text || typeof text !== 'string') {
+      console.log('Invalid text input for title extraction');
+      return '';
+    }
+
+    try {
+      const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+      
+      // Look for lines that might contain "subject:" or "re:"
+      const subjectLine = lines.find(line => 
+        /^(?:subject|re|reference):\s*(.+)/i.test(line)
+      );
+      
+      if (subjectLine) {
+        const match = subjectLine.match(/^(?:subject|re|reference):\s*(.+)/i);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      }
+
+      // If no subject line found, look for a suitable title in the first few lines
+      const titleLine = lines.slice(0, 5).find(line => 
+        line.length > 10 && 
+        line.length < 100 && 
+        !line.toLowerCase().match(/date|from|to|dear|subject|sincerely|regards|confidential/i)
+      );
+
+      return titleLine || '';
+    } catch (e) {
+      console.error('Title extraction error:', e);
+      return '';
+    }
+  };
+
+  const extractFrom = (text) => {
+    if (!text || typeof text !== 'string') {
+      console.log('Invalid text input for sender extraction');
+      return '';
+    }
+
+    try {
+      const patterns = [
+        /[Ff]rom:?\s*([^\n]+)/,
+        /[Ss]ender:?\s*([^\n]+)/,
+        /[Ss]incerely,?\s*([^\n]+)/,
+        /[Yy]ours [Ff]aithfully,?\s*([^\n]+)/,
+        /[Yy]ours [Ss]incerely,?\s*([^\n]+)/
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1] && match[1].trim()) {
+          return match[1].trim();
+        }
+      }
+    } catch (e) {
+      console.error('Sender extraction error:', e);
+    }
+    return '';
+  };
+
+  const extractTo = (text) => {
+    if (!text || typeof text !== 'string') {
+      console.log('Invalid text input for recipient extraction');
+      return '';
+    }
+
+    try {
+      const patterns = [
+        /[Tt]o:?\s*([^\n]+)/,
+        /[Rr]ecipient:?\s*([^\n]+)/,
+        /[Dd]ear\s+(?:Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|Sir\/Madam|Sir|Madam)?\s*([^,\n]+)/
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1] && match[1].trim()) {
+          return match[1].trim();
+        }
+      }
+    } catch (e) {
+      console.error('Recipient extraction error:', e);
+    }
+    return '';
+  };
+
+  const extractContact = (text) => {
+    if (!text || typeof text !== 'string') {
+      console.log('Invalid text input for contact extraction');
+      return '';
+    }
+
+    try {
+      const patterns = {
+        email: /\b[\w\.-]+@[\w\.-]+\.\w+\b/,
+        phone: [
+          /\b\+?\d{1,3}[-. ]?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}\b/,  // International format
+          /\b\d{3}[-. ]?\d{3}[-. ]?\d{4}\b/,  // US/Canada format
+          /\b\d{4}[-. ]?\d{3}[-. ]?\d{3}\b/   // Alternative format
+        ]
+      };
+
+      // Try to find email first
+      const emailMatch = text.match(patterns.email);
+      if (emailMatch && emailMatch[0]) return emailMatch[0];
+
+      // Then try phone numbers
+      for (const phonePattern of patterns.phone) {
+        const phoneMatch = text.match(phonePattern);
+        if (phoneMatch && phoneMatch[0]) return phoneMatch[0];
+      }
+    } catch (e) {
+      console.error('Contact extraction error:', e);
+    }
+    return '';
+  };
+
+  const determineUrgency = (text) => {
+    const urgencyPatterns = {
+      urgent: {
+        patterns: ['urgent', 'immediate', 'asap', 'emergency', 'critical'],
+        score: 3
+      },
+      high: {
+        patterns: ['priority', 'important', 'attention required', 'time sensitive'],
+        score: 2
+      },
+      medium: {
+        patterns: ['attention', 'please review', 'please respond'],
+        score: 1
+      }
+    };
+    
+    const textLower = text.toLowerCase();
+    let urgencyScore = 0;
+    
+    Object.values(urgencyPatterns).forEach(({patterns, score}) => {
+      if (patterns.some(pattern => textLower.includes(pattern))) {
+        urgencyScore += score;
+      }
+    });
+    
+    console.log('Urgency Score:', urgencyScore); // Debug log
+
+    if (urgencyScore >= 3) return 'urgent';
+    if (urgencyScore >= 2) return 'high';
+    if (urgencyScore >= 1) return 'medium';
+    return 'low';
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      try {
+        setSelectedFile(file);
+        console.log('Starting OCR for file:', file.name);
+        await performOCR(file);
+      } catch (error) {
+        console.error('Error processing file:', error);
+        setProcessing(false);
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Add New Letter</h1>
@@ -11,6 +335,8 @@ export default function AddLetterPage() {
               <label className="block text-sm font-medium text-gray-700">Date</label>
               <input
                 type="date"
+                value={formData.date}
+                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:border-[#374a63] focus:ring-1 focus:ring-[#374a63]"
               />
             </div>
@@ -18,6 +344,8 @@ export default function AddLetterPage() {
               <label className="block text-sm font-medium text-gray-700">Title</label>
               <input
                 type="text"
+                value={formData.title}
+                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:border-[#374a63] focus:ring-1 focus:ring-[#374a63]"
                 placeholder="Enter letter title"
               />
@@ -26,6 +354,8 @@ export default function AddLetterPage() {
               <label className="block text-sm font-medium text-gray-700">From</label>
               <input
                 type="text"
+                value={formData.from}
+                onChange={(e) => setFormData(prev => ({ ...prev, from: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:border-[#374a63] focus:ring-1 focus:ring-[#374a63]"
                 placeholder="Sender's name or department"
               />
@@ -34,6 +364,8 @@ export default function AddLetterPage() {
               <label className="block text-sm font-medium text-gray-700">To</label>
               <input
                 type="text"
+                value={formData.to}
+                onChange={(e) => setFormData(prev => ({ ...prev, to: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:border-[#374a63] focus:ring-1 focus:ring-[#374a63]"
                 placeholder="Recipient's name or department"
               />
@@ -42,6 +374,8 @@ export default function AddLetterPage() {
               <label className="block text-sm font-medium text-gray-700">Contact</label>
               <input
                 type="text"
+                value={formData.contact}
+                onChange={(e) => setFormData(prev => ({ ...prev, contact: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:border-[#374a63] focus:ring-1 focus:ring-[#374a63]"
                 placeholder="Contact number or email"
               />
@@ -49,6 +383,8 @@ export default function AddLetterPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700">Urgency</label>
               <select
+                value={formData.urgency}
+                onChange={(e) => setFormData(prev => ({ ...prev, urgency: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:border-[#374a63] focus:ring-1 focus:ring-[#374a63]"
               >
                 <option value="">Select urgency level</option>
@@ -61,12 +397,42 @@ export default function AddLetterPage() {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700">Content</label>
-            <textarea
-              rows={6}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:border-[#374a63] focus:ring-1 focus:ring-[#374a63]"
-              placeholder="Enter letter content"
-            />
+            <label className="block text-sm font-medium text-gray-700">Upload Letter</label>
+            <div className="mt-1 flex items-center justify-center w-full">
+              <label className={`w-full flex flex-col items-center px-4 py-6 bg-white text-gray-500 rounded-lg border-2 border-gray-300 border-dashed cursor-pointer hover:bg-gray-50 ${processing ? 'opacity-50' : ''}`}>
+                {processing ? (
+                  <div className="flex flex-col items-center">
+                    <svg className="animate-spin w-8 h-8 mb-2 text-[#28b4b4]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="text-sm font-medium text-[#28b4b4]">Processing document...</span>
+                  </div>
+                ) : selectedFile ? (
+                  <div className="flex flex-col items-center">
+                    <svg className="w-8 h-8 mb-2 text-[#28b4b4]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-[#28b4b4]">{selectedFile.name}</span>
+                    <span className="text-xs text-gray-500 mt-1">Click to change file</span>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <span className="text-sm">Click to upload or drag and drop</span>
+                    <span className="text-xs text-gray-500">PDF, PNG, JPG, JPEG, TIFF, BMP (Max 10MB)</span>
+                  </>
+                )}
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp"
+                  onChange={handleFileChange}
+                />
+              </label>
+            </div>
           </div>
 
           <div className="flex items-center justify-end space-x-4">
