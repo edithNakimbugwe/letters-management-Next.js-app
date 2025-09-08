@@ -1,8 +1,13 @@
 'use client';
 import { useState } from 'react';
 import { createWorker } from 'tesseract.js';
+import { useAuth } from '@/contexts/AuthContext';
+import { createLetter } from '@/services/firestore';
+import { useRouter } from 'next/navigation';
 
 export default function AddLetterPage() {
+  const { user, userProfile } = useAuth();
+  const router = useRouter();
   const [selectedFile, setSelectedFile] = useState(null);
   const [formData, setFormData] = useState({
     date: '',
@@ -13,32 +18,35 @@ export default function AddLetterPage() {
     urgency: ''
   });
   const [processing, setProcessing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const convertPdfToImages = async (file) => {
     try {
       // For this example, we'll just process the first page
       const pdfjsLib = await import('pdfjs-dist');
       pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-      
+
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const page = await pdf.getPage(1);
-      
+
       const scale = 2.0;
       const viewport = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
-      
+
       // Set canvas dimensions
       canvas.height = viewport.height;
       canvas.width = viewport.width;
-      
+
       // Render PDF page to canvas
       await page.render({
         canvasContext: context,
         viewport: viewport
       }).promise;
-      
+
       // Convert canvas to blob
       return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
@@ -74,11 +82,8 @@ export default function AddLetterPage() {
       setProcessing(true);
       let text;
 
-      const worker = await createWorker({
-        logger: m => console.log(m)
-      });
-      
-      await worker.load();
+      const worker = await createWorker();
+
       await worker.loadLanguage('eng');
       await worker.initialize('eng');
 
@@ -94,7 +99,7 @@ export default function AddLetterPage() {
       console.log('Processing image for OCR...');
       const result = await worker.recognize(imageSource);
       text = result.data.text;
-      
+
       console.log('OCR Result:', text);
 
       if (!text || typeof text !== 'string') {
@@ -102,7 +107,7 @@ export default function AddLetterPage() {
       }
 
       await worker.terminate();
-      
+
       console.log('Extracted Text:', text); // Debug log for extracted text
 
       // Extract information using patterns
@@ -126,6 +131,7 @@ export default function AddLetterPage() {
       }));
     } catch (error) {
       console.error('OCR Error:', error);
+      setError('Failed to extract text from image. Please try again or enter the information manually.');
     } finally {
       setProcessing(false);
     }
@@ -168,12 +174,12 @@ export default function AddLetterPage() {
 
     try {
       const lines = text.split('\n').map(line => line.trim()).filter(line => line);
-      
+
       // Look for lines that might contain "subject:" or "re:"
-      const subjectLine = lines.find(line => 
+      const subjectLine = lines.find(line =>
         /^(?:subject|re|reference):\s*(.+)/i.test(line)
       );
-      
+
       if (subjectLine) {
         const match = subjectLine.match(/^(?:subject|re|reference):\s*(.+)/i);
         if (match && match[1]) {
@@ -182,9 +188,9 @@ export default function AddLetterPage() {
       }
 
       // If no subject line found, look for a suitable title in the first few lines
-      const titleLine = lines.slice(0, 5).find(line => 
-        line.length > 10 && 
-        line.length < 100 && 
+      const titleLine = lines.slice(0, 5).find(line =>
+        line.length > 10 &&
+        line.length < 100 &&
         !line.toLowerCase().match(/date|from|to|dear|subject|sincerely|regards|confidential/i)
       );
 
@@ -293,16 +299,16 @@ export default function AddLetterPage() {
         score: 1
       }
     };
-    
+
     const textLower = text.toLowerCase();
     let urgencyScore = 0;
-    
+
     Object.values(urgencyPatterns).forEach(({patterns, score}) => {
       if (patterns.some(pattern => textLower.includes(pattern))) {
         urgencyScore += score;
       }
     });
-    
+
     console.log('Urgency Score:', urgencyScore); // Debug log
 
     if (urgencyScore >= 3) return 'urgent';
@@ -316,12 +322,76 @@ export default function AddLetterPage() {
     if (file) {
       try {
         setSelectedFile(file);
+        setError('');
         console.log('Starting OCR for file:', file.name);
         await performOCR(file);
       } catch (error) {
         console.error('Error processing file:', error);
+        setError('Error processing file. Please try again.');
         setProcessing(false);
       }
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!user) {
+      setError('You must be logged in to add a letter');
+      return;
+    }
+
+    if (!formData.title || !formData.from) {
+      setError('Please fill in at least the title and sender information');
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      setSaving(true);
+
+      // Convert your original fields to the firebase structure
+      const letterData = {
+        title: formData.title,
+        senderName: formData.from,
+        senderAddress: '', // Not in original form
+        senderEmail: formData.contact.includes('@') ? formData.contact : '',
+        senderPhone: !formData.contact.includes('@') ? formData.contact : '',
+        content: `To: ${formData.to}\n\nOriginal extraction from document.`, // Basic content
+        priority: formData.urgency || 'normal',
+        category: 'general',
+        dateReceived: formData.date ? new Date(formData.date) : new Date(),
+        status: 'received',
+        extractedFromImage: !!selectedFile,
+      };
+
+      await createLetter(letterData, user);
+      
+      setSuccess('Letter added successfully!');
+      
+      // Reset form
+      setFormData({
+        date: '',
+        title: '',
+        from: '',
+        to: '',
+        contact: '',
+        urgency: ''
+      });
+      
+      setSelectedFile(null);
+
+      // Redirect to letters list after 2 seconds
+      setTimeout(() => {
+        router.push('/lettersystem/letters');
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error adding letter:', error);
+      setError('Failed to add letter. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -329,7 +399,19 @@ export default function AddLetterPage() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Add New Letter</h1>
       <div className="bg-white shadow-md rounded-lg p-6">
-        <form className="space-y-6">
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+            {success}
+          </div>
+        )}
+
+        <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700">Date</label>
@@ -395,7 +477,7 @@ export default function AddLetterPage() {
               </select>
             </div>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700">Upload Letter</label>
             <div className="mt-1 flex items-center justify-center w-full">
@@ -425,11 +507,12 @@ export default function AddLetterPage() {
                     <span className="text-xs text-gray-500">PDF, PNG, JPG, JPEG, TIFF, BMP (Max 10MB)</span>
                   </>
                 )}
-                <input 
-                  type="file" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  className="hidden"
                   accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp"
                   onChange={handleFileChange}
+                  disabled={processing}
                 />
               </label>
             </div>
@@ -438,15 +521,18 @@ export default function AddLetterPage() {
           <div className="flex items-center justify-end space-x-4">
             <button
               type="button"
+              onClick={() => router.push('/lettersystem/letters')}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              disabled={processing || saving}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-[#28b4b4] text-white px-4 py-2 rounded-lg hover:bg-[#229999] transition-colors"
+              className="bg-[#28b4b4] text-white px-4 py-2 rounded-lg hover:bg-[#229999] transition-colors disabled:opacity-50"
+              disabled={processing || saving}
             >
-              Add Letter
+              {saving ? 'Adding Letter...' : 'Add Letter'}
             </button>
           </div>
         </form>
