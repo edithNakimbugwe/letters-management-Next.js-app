@@ -98,6 +98,7 @@ export const createLetter = async (letterData, currentUser) => {
       ...letterData,
       receivedBy,
       createdBy: currentUser.uid,
+      status: 'pending', // Default status for new letters
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -186,6 +187,25 @@ export const updateLetter = async (letterId, updates, currentUser) => {
   }
 };
 
+// Update letter status (e.g., from 'pending' to 'sent')
+export const updateLetterStatus = async (letterId, status) => {
+  if (!letterId || !status) return;
+  
+  try {
+    const letterRef = doc(db, 'letters', letterId);
+    await updateDoc(letterRef, {
+      status,
+      updatedAt: serverTimestamp(),
+      sentAt: status === 'sent' ? serverTimestamp() : null
+    });
+    
+    console.log('Letter status updated to:', status);
+  } catch (error) {
+    console.error('Error updating letter status:', error);
+    throw error;
+  }
+};
+
 export const deleteLetter = async (letterId) => {
   if (!letterId) return;
   
@@ -237,6 +257,78 @@ export const searchLetters = async (searchTerm, userId = null) => {
     return letters;
   } catch (error) {
     console.error('Error searching letters:', error);
+    throw error;
+  }
+};
+
+// Get dashboard statistics
+export const getDashboardStats = async (userId) => {
+  try {
+    const letters = await getLetters(userId);
+    
+    const stats = {
+      total: letters.length,
+      pending: letters.filter(letter => letter.status !== 'sent').length,
+      sent: letters.filter(letter => letter.status === 'sent').length,
+      urgent: letters.filter(letter => letter.priority === 'urgent' || letter.priority === 'high').length,
+      recent: letters.slice(0, 5) // Get 5 most recent letters
+    };
+    
+    return stats;
+  } catch (error) {
+    console.error('Error getting dashboard stats:', error);
+    throw error;
+  }
+};
+
+// Get monthly statistics for charts
+export const getMonthlyStats = async (userId) => {
+  try {
+    const letters = await getLetters(userId);
+    
+    // Get last 6 months of data
+    const monthlyData = {};
+    const now = new Date();
+    
+    // Initialize last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      
+      monthlyData[monthKey] = {
+        month: monthName,
+        total: 0,
+        pending: 0,
+        sent: 0,
+        urgent: 0
+      };
+    }
+    
+    // Count letters by month
+    letters.forEach(letter => {
+      const letterDate = letter.createdAt?.toDate() || new Date();
+      const monthKey = `${letterDate.getFullYear()}-${String(letterDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (monthlyData[monthKey]) {
+        monthlyData[monthKey].total++;
+        
+        if (letter.status === 'sent') {
+          monthlyData[monthKey].sent++;
+        } else {
+          monthlyData[monthKey].pending++;
+        }
+        
+        if (letter.priority === 'urgent' || letter.priority === 'high') {
+          monthlyData[monthKey].urgent++;
+        }
+      }
+    });
+    
+    // Convert to array format for charts
+    return Object.values(monthlyData);
+  } catch (error) {
+    console.error('Error getting monthly stats:', error);
     throw error;
   }
 };

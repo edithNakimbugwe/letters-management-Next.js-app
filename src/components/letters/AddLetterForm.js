@@ -395,8 +395,8 @@ const AddLetterForm = () => {
         </div>
 
         {/* Display who will be recorded as receiver */}
-        <div className="mb-4 p-3 bg-green-50 rounded-lg">
-          <p className="text-sm text-green-700">
+        <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: '#f0fffe' }}>
+          <p className="text-sm" style={{ color: '#28b4b4' }}>
             <strong>Received by:</strong> {userProfile?.displayName || user?.displayName || user?.email}
           </p>
         </div>
@@ -408,7 +408,7 @@ const AddLetterForm = () => {
         )}
 
         {success && (
-          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+          <div className="mb-4 p-3 rounded" style={{ backgroundColor: '#f0fffe', borderColor: '#28b4b4', color: '#28b4b4', border: '1px solid' }}>
             {success}
           </div>
         )}

@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Loader2, Download } from 'lucide-react';
 import { sendEmailWithAttachment, sendEmailWithMailto, sendEmailWithDownloadLink, validateEmail } from '../../services/email';
+import { updateLetterStatus } from '../../services/firestore';
 
-export default function SendEmailModal({ isOpen, onClose, letter }) {
+export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate }) {
   console.log('Modal render - isOpen:', isOpen, 'letter:', letter); // Debug log
   
   const [loading, setLoading] = useState(false);
@@ -64,6 +65,21 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
 
       if (result.status === 'success') {
         setSuccess(`✅ Email sent successfully to ${emailData.to_email}!`);
+        
+        // Update letter status to 'sent'
+        if (letter?.id) {
+          try {
+            await updateLetterStatus(letter.id, 'sent');
+            console.log('Letter status updated to sent');
+            
+            // Notify parent component to refresh data
+            if (onStatusUpdate) {
+              onStatusUpdate(letter.id, 'sent');
+            }
+          } catch (err) {
+            console.error('Error updating letter status:', err);
+          }
+        }
         
         // Close modal after 4 seconds
         setTimeout(() => {
@@ -155,7 +171,7 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
           )}
 
           {success && (
-            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+            <div className="mb-4 p-3 rounded" style={{ backgroundColor: '#f0fffe', borderColor: '#28b4b4', color: '#28b4b4', border: '1px solid' }}>
               {success}
             </div>
           )}

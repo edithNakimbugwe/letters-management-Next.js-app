@@ -154,7 +154,7 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
           )}
 
           {success && (
-            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+            <div className="mb-4 p-3 rounded" style={{ backgroundColor: '#f0fffe', borderColor: '#28b4b4', color: '#28b4b4', border: '1px solid' }}>
               {success}
             </div>
           )}

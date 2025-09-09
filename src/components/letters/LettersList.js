@@ -6,6 +6,7 @@ import { getLetters } from '@/services/firestore';
 import { ArrowUpDown, Pencil, Search, Trash2, Plus, Mail } from 'lucide-react';
 import Link from 'next/link';
 import SendEmailModal from './SendEmailModalSimple';
+import SummaryCards from './SummaryCards';
 
 export default function LettersList() {
   const { user } = useAuth();
@@ -52,12 +53,13 @@ export default function LettersList() {
       from: letter.senderName || 'Unknown Sender',
       to: user?.displayName || user?.email || 'You',
       contact: letter.senderEmail || letter.senderPhone || 'No contact info',
-      urgency: letter.priority || 'normal'
+      urgency: letter.priority || 'normal',
+      status: letter.status || 'pending'
     }));
 
     const filtered = formattedLetters.filter((row) => {
       if (!normalizedQuery) return true;
-      return [row.date, row.title, row.from, row.to, row.contact, row.urgency]
+      return [row.date, row.title, row.from, row.to, row.contact, row.urgency, row.status]
         .some((v) => String(v).toLowerCase().includes(normalizedQuery));
     });
 
@@ -108,6 +110,22 @@ export default function LettersList() {
     setSelectedLetter(null);
   };
 
+  const handleStatusUpdate = async (letterId, newStatus) => {
+    // Update the local state to reflect the change immediately
+    setLetters(prevLetters => 
+      prevLetters.map(letter => 
+        letter.id === letterId 
+          ? { ...letter, status: newStatus }
+          : letter
+      )
+    );
+    
+    // Optionally refresh from server to ensure consistency
+    setTimeout(() => {
+      fetchLetters();
+    }, 1000);
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -129,6 +147,10 @@ export default function LettersList() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Letters</h1>
+      
+      {/* Summary Cards */}
+      <SummaryCards letters={letters} />
+      
       <div className="bg-white shadow-md rounded-lg">
         <div className="p-4 md:p-6">
           {error && (
@@ -167,13 +189,14 @@ export default function LettersList() {
                   <SortableHeader label="To" columnKey="to" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Contact" columnKey="contact" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Urgency" columnKey="urgency" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
+                  <SortableHeader label="Status" columnKey="status" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <th className="px-3 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAndSortedLetters.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-6 text-center text-gray-500" colSpan={8}>
+                    <td className="px-3 py-6 text-center text-gray-500" colSpan={9}>
                       {letters.length === 0 ? 'No letters found. Add your first letter!' : 'No letters match your search.'}
                     </td>
                   </tr>
@@ -202,7 +225,7 @@ export default function LettersList() {
                               <div className="flex gap-1">
                                 <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">📎</span>
                                 {hasReceiverEmail && (
-                                  <Mail className="h-3 w-3 text-green-600" title="Can send via email" />
+                                  <Mail className="h-3 w-3" style={{ color: '#28b4b4' }} title="Can send via email" />
                                 )}
                               </div>
                             )}
@@ -218,6 +241,18 @@ export default function LettersList() {
                           <div className="truncate" title={row.contact}>{row.contact}</div>
                         </td>
                         <td className="px-3 py-3 capitalize">{row.urgency}</td>
+                        <td className="px-3 py-3">
+                          <span 
+                            className={`px-2 py-1 text-xs rounded-full ${
+                              row.status === 'sent' 
+                                ? 'text-white' 
+                                : getStatusColor(row.status)
+                            }`}
+                            style={row.status === 'sent' ? { backgroundColor: '#28b4b4' } : {}}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center justify-end gap-3">
                             <button 
@@ -251,6 +286,7 @@ export default function LettersList() {
         isOpen={showEmailModal}
         onClose={handleCloseModal}
         letter={selectedLetter}
+        onStatusUpdate={handleStatusUpdate}
       />
     </div>
   );
@@ -271,4 +307,17 @@ function SortableHeader({ label, columnKey, sortBy, sortDir, onToggle }) {
       </button>
     </th>
   );
+}
+
+function getStatusColor(status) {
+  switch (status) {
+    case 'sent':
+      return 'bg-green-100 text-green-800';
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'draft':
+      return 'bg-gray-100 text-gray-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
 }
