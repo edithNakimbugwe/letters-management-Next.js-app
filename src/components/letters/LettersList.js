@@ -192,13 +192,13 @@ export default function LettersList() {
                   <SortableHeader label="Urgency" columnKey="urgency" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Status" columnKey="status" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Bureau" columnKey="bureau" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
-                  <th className="px-3 py-3 text-right font-medium">Actions</th>
+                  {/* <th className="px-3 py-3 text-right font-medium">Actions</th> */}
                 </tr>
               </thead>
               <tbody>
                 {filteredAndSortedLetters.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-6 text-center text-gray-500" colSpan={10}>
+                    <td className="px-3 py-6 text-center text-gray-500" colSpan={9}>
                       {letters.length === 0 ? 'No letters found. Add your first letter!' : 'No letters match your search.'}
                     </td>
                   </tr>
@@ -260,7 +260,7 @@ export default function LettersList() {
                             {row.bureau}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        {/* <td className="px-3 py-3">
                           <div className="flex items-center justify-end gap-3">
                             <button 
                               className="p-1 rounded hover:bg-gray-100" 
@@ -277,7 +277,7 @@ export default function LettersList() {
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </button>
                           </div>
-                        </td>
+                        </td> */}
                       </tr>
                     );
                   })

@@ -17,6 +17,7 @@ const AddLetterForm = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -268,9 +269,7 @@ const AddLetterForm = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+  const handleSubmit = () => {
     if (!user) {
       setError('You must be logged in to add a letter');
       return;
@@ -281,10 +280,16 @@ const AddLetterForm = () => {
       return;
     }
 
+    // Show confirmation modal instead of submitting directly
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     try {
       setError('');
       setSuccess('');
       setLoading(true);
+      setShowConfirmModal(false);
 
       let attachmentUrl = null;
       
@@ -413,7 +418,11 @@ const AddLetterForm = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form className="space-y-6" onSubmit={(e) => {
+          console.log('Form onSubmit triggered!');
+          e.preventDefault();
+          handleSubmit();
+        }}>
           {/* Letter Title */}
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
@@ -603,7 +612,8 @@ const AddLetterForm = () => {
               Cancel
             </Button>
             <Button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               disabled={loading || processing}
               className="bg-indigo-600 hover:bg-indigo-700"
             >
@@ -612,6 +622,52 @@ const AddLetterForm = () => {
           </div>
         </form>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0">
+                <svg className="h-8 w-8 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Confirm Letter Submission
+                </h3>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-600">
+                <strong>Important:</strong> Once you add this letter, you will not be able to edit or delete it. 
+                Please make sure all information is correct before proceeding.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmSubmit}
+                disabled={loading}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {loading ? 'Adding Letter...' : 'Yes, Add Letter'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
