@@ -14,7 +14,8 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
   const [emailData, setEmailData] = useState({
     to_email: '',
     subject: '',
-    message: ''
+    message: '',
+    bureau: ''
   });
 
   // Update emailData when letter changes
@@ -23,7 +24,8 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
       setEmailData({
         to_email: letter.receiverEmail || '',
         subject: `Letter: ${letter.title || 'Document'}`,
-        message: `Dear recipient,\n\nPlease find the attached letter: ${letter.title || 'Document'}\n\nBest regards,\nLetter Management System`
+        message: `Dear recipient,\n\nPlease find the attached letter: ${letter.title || 'Document'}\n\nBest regards,\nLetter Management System`,
+        bureau: ''
       });
     }
   }, [letter]);
@@ -49,6 +51,11 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
       return;
     }
 
+    if (!emailData.bureau) {
+      setError('Please select the bureau to send the letter to');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -66,11 +73,11 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
       if (result.status === 'success') {
         setSuccess(`✅ Email sent successfully to ${emailData.to_email}!`);
         
-        // Update letter status to 'sent'
+        // Update letter status to 'sent' with department
         if (letter?.id) {
           try {
-            await updateLetterStatus(letter.id, 'sent');
-            console.log('Letter status updated to sent');
+            await updateLetterStatus(letter.id, 'sent', emailData.bureau);
+            console.log('Letter status updated to sent with bureau:', emailData.bureau);
             
             // Notify parent component to refresh data
             if (onStatusUpdate) {
@@ -206,6 +213,29 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
               />
+            </div>
+
+            <div>
+              <label htmlFor="bureau" className="block text-sm font-medium text-gray-700 mb-1">
+                Bureau (To Send To) *
+              </label>
+              <select
+                id="bureau"
+                name="bureau"
+                value={emailData.bureau}
+                onChange={handleInputChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
+              >
+                <option value="">Select bureau to send to</option>
+                <option value="Mobility">Mobility</option>
+                <option value="Pathogen Economy">Pathogen Economy</option>
+                <option value="Aeronautics-and-Space-science">Aeronautics and Space Science</option>
+                <option value="Industry 4.0+">Industry 4.0+</option>
+                <option value="Infrastructure-Innovations">Infrastructure Innovations</option>
+                <option value="Import Substitution">Import Substitution</option>
+                <option value="Productivity Acceleration">Productivity Acceleration</option>
+              </select>
             </div>
 
             <div>

@@ -54,12 +54,13 @@ export default function LettersList() {
       to: user?.displayName || user?.email || 'You',
       contact: letter.senderEmail || letter.senderPhone || 'No contact info',
       urgency: letter.priority || 'normal',
-      status: letter.status || 'pending'
+      status: letter.status || 'pending',
+      bureau: letter.bureau || '-'
     }));
 
     const filtered = formattedLetters.filter((row) => {
       if (!normalizedQuery) return true;
-      return [row.date, row.title, row.from, row.to, row.contact, row.urgency, row.status]
+      return [row.date, row.title, row.from, row.to, row.contact, row.urgency, row.status, row.bureau]
         .some((v) => String(v).toLowerCase().includes(normalizedQuery));
     });
 
@@ -190,13 +191,14 @@ export default function LettersList() {
                   <SortableHeader label="Contact" columnKey="contact" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Urgency" columnKey="urgency" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Status" columnKey="status" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
+                  <SortableHeader label="Bureau" columnKey="bureau" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <th className="px-3 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAndSortedLetters.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-6 text-center text-gray-500" colSpan={9}>
+                    <td className="px-3 py-6 text-center text-gray-500" colSpan={10}>
                       {letters.length === 0 ? 'No letters found. Add your first letter!' : 'No letters match your search.'}
                     </td>
                   </tr>
@@ -252,6 +254,11 @@ export default function LettersList() {
                           >
                             {row.status}
                           </span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
+                          <div className="truncate" title={row.bureau}>
+                            {row.bureau}
+                          </div>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center justify-end gap-3">
