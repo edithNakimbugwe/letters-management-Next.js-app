@@ -88,6 +88,42 @@ export const trackLetterSend = async (letterId, bureau, recipientEmail, currentU
 };
 
 // Users Collection Functions
+// Fetch all users with their roles
+export const getUsersWithRoles = async () => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef);
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        email: data.email || '',
+        role: data.role || 'user',
+        ...data
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    return [];
+  }
+};
+
+// Update a user's role
+export const updateUserRole = async (uid, newRole) => {
+  if (!uid) return;
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      role: newRole,
+      updatedAt: serverTimestamp()
+    });
+    console.log('User role updated successfully');
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    throw error;
+  }
+};
 export const createUserDocument = async (user, additionalData = {}) => {
   if (!user) return;
   
