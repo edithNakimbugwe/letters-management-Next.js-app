@@ -55,6 +55,7 @@ export default function LettersList() {
     // Convert Firebase data to match your original structure
     const formattedLetters = letters.map(letter => ({
       id: letter.id,
+      ...letter, // Keep all original letter data
       date: letter.dateReceived?.toDate ? 
         letter.dateReceived.toDate().toISOString().split('T')[0] : 
         letter.createdAt?.toDate ? 
@@ -66,7 +67,9 @@ export default function LettersList() {
       contact: letter.senderEmail || letter.senderPhone || 'No contact info',
       urgency: letter.priority || 'normal',
       status: letter.status || 'pending',
-      bureau: letter.bureau || '-'
+      bureau: letter.bureau || '-',
+      sentCount: letter.sentCount || 0,
+      sendHistory: letter.sendHistory || []
     }));
 
     const filtered = formattedLetters.filter((row) => {
@@ -235,20 +238,7 @@ export default function LettersList() {
                         <td className="px-3 py-3">{index + 1}</td>
                         <td className="px-3 py-3 whitespace-nowrap">{row.date}</td>
                         <td className="px-3 py-3 whitespace-nowrap max-w-[360px]">
-                          <div className="flex items-center gap-2">
-                            <div className="truncate" title={row.title}>{row.title}</div>
-                            <div className="flex gap-1">
-                              {hasOCRAttachment && (
-                                <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded" title="OCR Image">📷</span>
-                              )}
-                              {hasDocument && (
-                                <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded" title="Document Attachment">�</span>
-                              )}
-                              {hasReceiverEmail && (
-                                <Mail className="h-3 w-3" style={{ color: '#28b4b4' }} title="Can send via email" />
-                              )}
-                            </div>
-                          </div>
+                          <div className="truncate" title={row.title}>{row.title}</div>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
                           <div className="truncate" title={row.from}>{row.from}</div>
@@ -281,19 +271,34 @@ export default function LettersList() {
                         <td className="px-3 py-3 capitalize">{row.urgency}</td>
                         <td className="px-3 py-3">
                           <span 
-                            className={`px-2 py-1 text-xs rounded-full ${
+                            className={`px-2 py-1 text-xs rounded-full inline-block w-fit ${
                               row.status === 'sent' 
                                 ? 'text-white' 
                                 : getStatusColor(row.status)
                             }`}
                             style={row.status === 'sent' ? { backgroundColor: '#28b4b4' } : {}}
                           >
-                            {row.status}
+                            {row.status === 'sent' && row.sentCount > 0 
+                              ? `Sent (${row.sentCount}x)` 
+                              : row.status}
                           </span>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
-                          <div className="truncate" title={row.bureau}>
-                            {row.bureau}
+                          <div className="max-w-[220px]">
+                            {row.status === 'sent' && row.sendHistory && row.sendHistory.length > 0 ? (
+                              <div className="text-xs">
+                                {row.sendHistory.map((send, index) => (
+                                  <div key={index} className="flex items-center gap-1 mb-1">
+                                    <span>-</span>
+                                    <span className="truncate">{send.bureau}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="truncate" title={row.bureau}>
+                                {row.bureau}
+                              </div>
+                            )}
                           </div>
                         </td>
                         {/* <td className="px-3 py-3">

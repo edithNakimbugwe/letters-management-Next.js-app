@@ -114,15 +114,6 @@ export async function POST(request) {
             </div>
           ` : ''}
 
-          ${attachment_url ? `
-            <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #2196f3;">
-              <strong>🖼️ OCR Image:</strong><br>
-              <a href="${attachment_url}" style="color: #2196f3; text-decoration: none;" target="_blank">
-                View extracted image
-              </a>
-            </div>
-          ` : ''}
-
           ${!attachment_url && !document_attachment ? `
             <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #ffc107;">
               <strong>ℹ️ Note:</strong> This letter does not have any file attachments.

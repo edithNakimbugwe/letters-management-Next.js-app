@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Loader2, Download } from 'lucide-react';
 import { sendEmailWithAttachment, sendEmailWithMailto, sendEmailWithDownloadLink, validateEmail } from '../../services/email';
-import { updateLetterStatus } from '../../services/firestore';
+import { trackLetterSend } from '../../services/firestore';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate }) {
+  const { user } = useAuth();
   console.log('Modal render - isOpen:', isOpen, 'letter:', letter); // Debug log
   console.log('Letter attachment data:', {
     extractedFromImage: letter?.extractedFromImage,
@@ -122,21 +124,23 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
       });
 
       if (result.status === 'success') {
-        setSuccess(`✅ Email sent successfully to ${emailData.to_email}!`);
-        
-        // Update letter status to 'sent' with department
-        if (letter?.id) {
+        // Track the letter send with bureau and recipient information
+        let sendTrackingResult = null;
+        if (letter?.id && user) {
           try {
-            await updateLetterStatus(letter.id, 'sent', emailData.bureau);
-            console.log('Letter status updated to sent with bureau:', emailData.bureau);
-            
-            // Notify parent component to refresh data
-            if (onStatusUpdate) {
-              onStatusUpdate(letter.id, 'sent');
-            }
+            sendTrackingResult = await trackLetterSend(letter.id, emailData.bureau, emailData.to_email, user);
+            console.log('Letter send tracked successfully:', sendTrackingResult);
           } catch (err) {
-            console.error('Error updating letter status:', err);
+            console.error('Error tracking letter send:', err);
           }
+        }
+        
+        const sendCountText = sendTrackingResult ? ` (Send #${sendTrackingResult.sendNumber})` : '';
+        setSuccess(`✅ Email sent successfully to ${emailData.to_email}${sendCountText}!`);
+        
+        // Notify parent component to refresh data
+        if (onStatusUpdate) {
+          onStatusUpdate(letter.id, 'sent');
         }
         
         // Close modal after 4 seconds

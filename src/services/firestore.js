@@ -14,6 +14,50 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 
+// Track letter send with bureau information
+export const trackLetterSend = async (letterId, bureau, recipientEmail, currentUser) => {
+  try {
+    const letterRef = doc(db, 'letters', letterId);
+    const letterDoc = await getDoc(letterRef);
+    
+    if (!letterDoc.exists()) {
+      throw new Error('Letter not found');
+    }
+    
+    const letterData = letterDoc.data();
+    const currentSendHistory = letterData.sendHistory || [];
+    const currentSentCount = letterData.sentCount || 0;
+    
+    // Create new send record
+    const sendRecord = {
+      bureau: bureau,
+      recipientEmail: recipientEmail,
+      sentBy: currentUser.uid,
+      sentAt: new Date(), // Using Date() instead of serverTimestamp() for arrays
+      sendNumber: currentSentCount + 1
+    };
+    
+    // Update letter with new send information
+    await updateDoc(letterRef, {
+      status: 'sent',
+      sentCount: currentSentCount + 1,
+      sendHistory: [...currentSendHistory, sendRecord],
+      lastSentAt: new Date(),
+      lastSentTo: bureau,
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('Letter send tracked successfully');
+    return {
+      sendNumber: currentSentCount + 1,
+      totalSends: currentSentCount + 1
+    };
+  } catch (error) {
+    console.error('Error tracking letter send:', error);
+    throw error;
+  }
+};
+
 // Users Collection Functions
 export const createUserDocument = async (user, additionalData = {}) => {
   if (!user) return;
