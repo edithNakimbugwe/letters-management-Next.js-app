@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createWorker } from 'tesseract.js';
 import { useAuth } from '@/contexts/AuthContext';
 import { createLetter } from '@/services/firestore';
+import { uploadLetterDocument } from '@/services/storage';
 import { useRouter } from 'next/navigation';
 
 export default function AddLetterPage() {
@@ -21,6 +22,7 @@ export default function AddLetterPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const convertPdfToImages = async (file) => {
     try {
@@ -333,7 +335,7 @@ export default function AddLetterPage() {
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     
     if (!user) {
@@ -346,10 +348,40 @@ export default function AddLetterPage() {
       return;
     }
 
+    // Show confirmation modal instead of submitting directly
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    console.log('🚀 === STARTING LETTER SUBMISSION (PAGE.JSX) ===');
+    console.log('📁 Selected file:', selectedFile ? { name: selectedFile.name, size: selectedFile.size, type: selectedFile.type } : '❌ No file selected');
+    console.log('📤 User:', user ? { uid: user.uid, email: user.email } : '❌ No user');
+    
     try {
       setError('');
       setSuccess('');
       setSaving(true);
+      setShowConfirmModal(false);
+
+      let attachmentUrl = null;
+      let documentMetadata = null;
+      
+      // Upload file if one was selected (for OCR)
+      if (selectedFile) {
+        try {
+          console.log('🔄 Uploading OCR file to Firebase Storage...');
+          documentMetadata = await uploadLetterDocument(selectedFile, user.uid);
+          attachmentUrl = documentMetadata.url; // Keep for backward compatibility
+          console.log('✅ File uploaded successfully:', documentMetadata);
+        } catch (uploadError) {
+          console.error('❌ Error uploading file:', uploadError);
+          setError(`Failed to upload file: ${uploadError.message}`);
+          setSaving(false);
+          return;
+        }
+      } else {
+        console.log('⚠️  No file selected - proceeding without attachment');
+      }
 
       // Convert your original fields to the firebase structure
       const letterData = {
@@ -364,7 +396,15 @@ export default function AddLetterPage() {
         dateReceived: formData.date ? new Date(formData.date) : new Date(),
         status: 'received',
         extractedFromImage: !!selectedFile,
+        // ADD ATTACHMENT FIELDS
+        attachmentUrl, // Store the file URL (backward compatibility)
+        hasAttachment: !!attachmentUrl, // Boolean flag for easier querying
+        documentMetadata, // Store document metadata (main attachment)
+        hasDocument: !!documentMetadata, // Boolean flag for document existence
+        originalFileMetadata: documentMetadata, // The original uploaded file for OCR
       };
+
+      console.log('📋 Final letter data with attachments:', JSON.stringify(letterData, null, 2));
 
       await createLetter(letterData, user);
       
@@ -537,6 +577,55 @@ export default function AddLetterPage() {
           </div>
         </form>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 border-2 shadow-lg" style={{ borderColor: '#28b4b4' }}>
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0">
+                <svg className="h-8 w-8 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Confirm Letter Submission
+                </h3>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-600">
+                <strong>Important:</strong> Once you add this letter, you will <span className="text-red-600 font-semibold">not be able to edit or delete it</span>. 
+                Please make sure all information is correct before proceeding.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSubmit}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
+                style={{ backgroundColor: '#28b4b4' }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = '#229999'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = '#28b4b4'}
+              >
+                {saving ? 'Adding Letter...' : 'Yes, Add Letter'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

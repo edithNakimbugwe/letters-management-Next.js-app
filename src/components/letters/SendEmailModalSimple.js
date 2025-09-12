@@ -3,19 +3,89 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Loader2, Download } from 'lucide-react';
 import { sendEmailWithAttachment, sendEmailWithMailto, sendEmailWithDownloadLink, validateEmail } from '../../services/email';
-import { updateLetterStatus } from '../../services/firestore';
+import { trackLetterSend, getBureaus } from '../../services/firestore';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate }) {
+  const [bureaus, setBureaus] = useState([]);
+  const [bureauMembers, setBureauMembers] = useState([]);
+  const [emailData, setEmailData] = useState({
+    to_email: '',
+    subject: '',
+    message: '',
+    bureau: ''
+  });
+
+  // Fetch bureaus on mount
+  useEffect(() => {
+    async function fetchBureaus() {
+      const data = await getBureaus();
+      setBureaus(data);
+    }
+    fetchBureaus();
+  }, []);
+
+  // Update members when bureau changes
+  useEffect(() => {
+    if (emailData.bureau) {
+      const bureau = bureaus.find(b => b.name === emailData.bureau);
+      setBureauMembers(bureau ? bureau.members : []);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    } else {
+      setBureauMembers([]);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    }
+  }, [emailData.bureau, bureaus]);
+  const { user } = useAuth();
   console.log('Modal render - isOpen:', isOpen, 'letter:', letter); // Debug log
+  console.log('Letter attachment data:', {
+    extractedFromImage: letter?.extractedFromImage,
+    hasAttachment: letter?.hasAttachment,
+    attachmentUrl: letter?.attachmentUrl,
+    hasDocument: letter?.hasDocument,
+    documentMetadata: letter?.documentMetadata,
+    originalFileMetadata: letter?.originalFileMetadata
+  }); // Debug log
+  if (letter && isOpen) {
+    console.log('=== DEBUGGING LETTER OBJECT ===');
+    console.log('Full letter object keys:', Object.keys(letter));
+    console.log('Full letter object (pretty print):');
+    console.log(JSON.stringify(letter, null, 2));
+    console.log('=== END LETTER OBJECT DEBUG ===');
+  }
+
+  // Helper function to get the main attachment for the letter
+  const getMainAttachment = (letter) => {
+    // Priority: documentMetadata (new format) > originalFileMetadata > attachmentUrl (legacy)
+    if (letter?.documentMetadata) {
+      return {
+        type: 'document',
+        metadata: letter.documentMetadata,
+        url: letter.documentMetadata.url
+      };
+    }
+    if (letter?.originalFileMetadata) {
+      return {
+        type: 'original',
+        metadata: letter.originalFileMetadata,
+        url: letter.originalFileMetadata.url
+      };
+    }
+    if (letter?.attachmentUrl) {
+      return {
+        type: 'legacy',
+        url: letter.attachmentUrl
+      };
+    }
+    return null;
+  };
+
+  const mainAttachment = getMainAttachment(letter);
+  console.log('Main attachment detected:', mainAttachment);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [emailData, setEmailData] = useState({
-    to_email: '',
-    subject: '',
-    message: ''
-  });
 
   // Update emailData when letter changes
   useEffect(() => {
@@ -23,7 +93,8 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
       setEmailData({
         to_email: letter.receiverEmail || '',
         subject: `Letter: ${letter.title || 'Document'}`,
-        message: `Dear recipient,\n\nPlease find the attached letter: ${letter.title || 'Document'}\n\nBest regards,\nLetter Management System`
+        message: `Dear recipient,\n\nPlease find the attached letter: ${letter.title || 'Document'}\n\nBest regards,\nLetter Management System`,
+        bureau: ''
       });
     }
   }, [letter]);
@@ -49,6 +120,17 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
       return;
     }
 
+    // Check if letter has any attachments (OCR file stored as documentMetadata or legacy attachmentUrl)
+    if (!mainAttachment) {
+      setError('No attachments found for this letter');
+      return;
+    }
+
+    if (!emailData.bureau) {
+      setError('Please select the bureau to send the letter to');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -58,27 +140,30 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
         to_email: emailData.to_email,
         subject: emailData.subject,
         message: emailData.message,
-        attachment_url: letter?.attachmentUrl || null,
+        attachment_url: letter?.attachmentUrl || null, // Legacy OCR image URL
+        document_attachment: letter?.documentMetadata || null, // Main attachment (OCR file or document)
         letter_title: letter?.title || 'Letter',
         from_name: 'Letter Management System'
       });
 
       if (result.status === 'success') {
-        setSuccess(`✅ Email sent successfully to ${emailData.to_email}!`);
-        
-        // Update letter status to 'sent'
-        if (letter?.id) {
+        // Track the letter send with bureau and recipient information
+        let sendTrackingResult = null;
+        if (letter?.id && user) {
           try {
-            await updateLetterStatus(letter.id, 'sent');
-            console.log('Letter status updated to sent');
-            
-            // Notify parent component to refresh data
-            if (onStatusUpdate) {
-              onStatusUpdate(letter.id, 'sent');
-            }
+            sendTrackingResult = await trackLetterSend(letter.id, emailData.bureau, emailData.to_email, user);
+            console.log('Letter send tracked successfully:', sendTrackingResult);
           } catch (err) {
-            console.error('Error updating letter status:', err);
+            console.error('Error tracking letter send:', err);
           }
+        }
+        
+        const sendCountText = sendTrackingResult ? ` (Send #${sendTrackingResult.sendNumber})` : '';
+        setSuccess(`✅ Email sent successfully to ${emailData.to_email}${sendCountText}!`);
+        
+        // Notify parent component to refresh data
+        if (onStatusUpdate) {
+          onStatusUpdate(letter.id, 'sent');
         }
         
         // Close modal after 4 seconds
@@ -135,8 +220,8 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg w-full max-w-md border-2 shadow-lg" style={{ borderColor: '#28b4b4' }}>
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
@@ -158,9 +243,28 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
             <p className="text-sm text-gray-600">
               <span className="font-medium">From:</span> {letter?.senderName || 'N/A'}
             </p>
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">Attachment:</span> {letter?.attachmentUrl ? 'Available' : 'Not available'}
-            </p>
+            
+            {/* Attachment Information */}
+            <div className="mt-2 space-y-1">
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">Attachments:</span>
+              </p>
+              {letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-green-600">
+                  � Attachment: {letter.documentMetadata.name} ({(letter.documentMetadata.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+              {letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-blue-600">
+                  � Legacy Attachment: Available
+                </div>
+              )}
+              {!letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-gray-500">
+                  No attachments available
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Error/Success Messages */}
@@ -178,20 +282,43 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
 
           {/* Email Form */}
           <form onSubmit={handleSendEmail} className="space-y-4">
+
+            <div>
+              <label htmlFor="bureau" className="block text-sm font-medium text-gray-700 mb-1">
+                Bureau (To Send To) *
+              </label>
+              <select
+                id="bureau"
+                name="bureau"
+                value={emailData.bureau}
+                onChange={handleInputChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
+              >
+                <option value="">Select bureau to send to</option>
+                {bureaus.map(bureau => (
+                  <option key={bureau.id} value={bureau.name}>{bureau.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label htmlFor="to_email" className="block text-sm font-medium text-gray-700 mb-1">
                 Recipient Email *
               </label>
-              <input
-                type="email"
+              <select
                 id="to_email"
                 name="to_email"
                 value={emailData.to_email}
                 onChange={handleInputChange}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
-                placeholder="recipient@example.com"
-              />
+                disabled={!emailData.bureau || bureauMembers.length === 0}
+              >
+                <option value="">{!emailData.bureau ? 'Select a bureau first' : bureauMembers.length === 0 ? 'No members in this bureau' : 'Select an email'}</option>
+                {bureauMembers.map((email, idx) => (
+                  <option key={idx} value={email}>{email}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -207,6 +334,7 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
               />
             </div>
+
 
             <div>
               <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">

@@ -1,3 +1,32 @@
+// Bureaus Collection Functions
+export const addBureau = async ({ name, members, addedBy }) => {
+  try {
+    const bureausRef = collection(db, 'bureaus');
+    const createdAt = serverTimestamp();
+    const docRef = await addDoc(bureausRef, {
+      name,
+      members,
+      addedBy,
+      createdAt,
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error adding bureau:', error);
+    throw error;
+  }
+};
+
+export const getBureaus = async () => {
+  try {
+    const bureausRef = collection(db, 'bureaus');
+    const q = query(bureausRef, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error fetching bureaus:', error);
+    return [];
+  }
+};
 import { db } from '../firebase-config/firebase';
 import { 
   collection, 
@@ -14,7 +43,87 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 
+// Track letter send with bureau information
+export const trackLetterSend = async (letterId, bureau, recipientEmail, currentUser) => {
+  try {
+    const letterRef = doc(db, 'letters', letterId);
+    const letterDoc = await getDoc(letterRef);
+    
+    if (!letterDoc.exists()) {
+      throw new Error('Letter not found');
+    }
+    
+    const letterData = letterDoc.data();
+    const currentSendHistory = letterData.sendHistory || [];
+    const currentSentCount = letterData.sentCount || 0;
+    
+    // Create new send record
+    const sendRecord = {
+      bureau: bureau,
+      recipientEmail: recipientEmail,
+      sentBy: currentUser.uid,
+      sentAt: new Date(), // Using Date() instead of serverTimestamp() for arrays
+      sendNumber: currentSentCount + 1
+    };
+    
+    // Update letter with new send information
+    await updateDoc(letterRef, {
+      status: 'sent',
+      sentCount: currentSentCount + 1,
+      sendHistory: [...currentSendHistory, sendRecord],
+      lastSentAt: new Date(),
+      lastSentTo: bureau,
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('Letter send tracked successfully');
+    return {
+      sendNumber: currentSentCount + 1,
+      totalSends: currentSentCount + 1
+    };
+  } catch (error) {
+    console.error('Error tracking letter send:', error);
+    throw error;
+  }
+};
+
 // Users Collection Functions
+// Fetch all users with their roles
+export const getUsersWithRoles = async () => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef);
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        email: data.email || '',
+        role: data.role || 'user',
+        ...data
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    return [];
+  }
+};
+
+// Update a user's role
+export const updateUserRole = async (uid, newRole) => {
+  if (!uid) return;
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      role: newRole,
+      updatedAt: serverTimestamp()
+    });
+    console.log('User role updated successfully');
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    throw error;
+  }
+};
 export const createUserDocument = async (user, additionalData = {}) => {
   if (!user) return;
   
@@ -85,25 +194,45 @@ export const updateUserDocument = async (uid, updates) => {
 
 // Letters Collection Functions
 export const createLetter = async (letterData, currentUser) => {
+  console.log('=== CREATING LETTER IN FIRESTORE ===');
+  console.log('Letter data received:', JSON.stringify(letterData, null, 2));
+  console.log('Current user:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'No user');
+  
   if (!currentUser) {
     throw new Error('User must be logged in to create a letter');
   }
   
   try {
-    // Get the current user's document to get their full name
+    // Get the current user's document to get their full name and bureau
     const userDoc = await getUserDocument(currentUser.uid);
     const receivedBy = userDoc?.displayName || currentUser.displayName || currentUser.email;
+    console.log('User document data:', userDoc);
     
-    const letterRef = await addDoc(collection(db, 'letters'), {
+    const letterDbData = {
       ...letterData,
       receivedBy,
       createdBy: currentUser.uid,
-      status: 'pending', // Default status for new letters
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
-    });
+    };
+    
+    console.log('Final letter data for Firestore:', JSON.stringify(letterDbData, null, 2));
+    
+    // If status is 'received' and user has bureau, add it to the letter
+    if (letterData.status === 'received' && userDoc?.bureau) {
+      letterDbData.bureau = userDoc.bureau;
+      letterDbData.receivedAt = serverTimestamp();
+    }
+    
+    // If no status provided, use 'pending' as default
+    if (!letterData.status) {
+      letterDbData.status = 'pending';
+    }
+    
+    const letterRef = await addDoc(collection(db, 'letters'), letterDbData);
     
     console.log('Letter created successfully with ID:', letterRef.id);
+    console.log('=== LETTER CREATION COMPLETED ===');
     return letterRef;
   } catch (error) {
     console.error('Error creating letter:', error);
@@ -188,16 +317,53 @@ export const updateLetter = async (letterId, updates, currentUser) => {
 };
 
 // Update letter status (e.g., from 'pending' to 'sent')
-export const updateLetterStatus = async (letterId, status) => {
+// Update letter status (e.g., from 'pending' to 'sent')
+export const updateLetterStatus = async (letterId, status, bureau = null) => {
   if (!letterId || !status) return;
   
   try {
     const letterRef = doc(db, 'letters', letterId);
-    await updateDoc(letterRef, {
+    const updateData = {
       status,
       updatedAt: serverTimestamp(),
       sentAt: status === 'sent' ? serverTimestamp() : null
-    });
+    };
+    
+    // Add bureau when status changes to 'sent'
+    if (status === 'sent' && bureau) {
+      updateData.bureau = bureau;
+    }
+    
+    await updateDoc(letterRef, updateData);
+    
+    console.log('Letter status updated to:', status);
+  } catch (error) {
+    console.error('Error updating letter status:', error);
+    throw error;
+  }
+};
+
+// Update letter status with user bureau (for received letters)
+export const updateLetterStatusWithUserBureau = async (letterId, status, currentUser) => {
+  if (!letterId || !status || !currentUser) return;
+  
+  try {
+    const letterRef = doc(db, 'letters', letterId);
+    const updateData = {
+      status,
+      updatedAt: serverTimestamp()
+    };
+    
+    // If status is 'received', get user's bureau and add it
+    if (status === 'received') {
+      const userDoc = await getUserDocument(currentUser.uid);
+      if (userDoc?.bureau) {
+        updateData.bureau = userDoc.bureau;
+        updateData.receivedAt = serverTimestamp();
+      }
+    }
+    
+    await updateDoc(letterRef, updateData);
     
     console.log('Letter status updated to:', status);
   } catch (error) {

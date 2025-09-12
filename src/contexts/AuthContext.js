@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(null);
 
   // Sign up with email and password
-  const signup = async (email, password, displayName = '') => {
+  const signup = async (email, password, displayName = '', bureau = '') => {
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Create user document in Firestore
-      await createUserDocument(result.user, { displayName });
+      await createUserDocument(result.user, { displayName, bureau });
       
       return result;
     } catch (error) {

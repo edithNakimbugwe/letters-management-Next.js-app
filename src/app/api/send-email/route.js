@@ -2,10 +2,23 @@ import nodemailer from 'nodemailer';
 
 export async function POST(request) {
   try {
-    const { to_email, subject, message, attachment_url, letter_title } = await request.json();
+    const { 
+      to_email, 
+      subject, 
+      message, 
+      attachment_url, 
+      document_attachment, 
+      letter_title 
+    } = await request.json();
 
     // Log for debugging
-    console.log('Email request received:', { to_email, subject, letter_title });
+    console.log('Email request received:', { 
+      to_email, 
+      subject, 
+      letter_title, 
+      has_attachment: !!attachment_url,
+      has_document: !!document_attachment 
+    });
 
     // Validate required fields
     if (!to_email || !subject) {
@@ -49,11 +62,18 @@ export async function POST(request) {
     // Prepare email content
     let emailContent = message || `Please find the letter: ${letter_title}`;
     
-    if (attachment_url) {
+    // Handle main document attachment (OCR file or uploaded document)
+    if (document_attachment && document_attachment.url) {
+      emailContent += `\n\nAttachment: ${document_attachment.name} (${(document_attachment.size / 1024 / 1024).toFixed(2)} MB)`;
+      emailContent += `\n\nDownload link: ${document_attachment.url}`;
+    }
+    // Handle legacy OCR attachment URL (for backward compatibility)
+    else if (attachment_url) {
       emailContent += `\n\nAttachment: ${attachment_url}`;
-      emailContent += `\n\nNote: Please download the attachment from the link above.`;
-    } else {
-      emailContent += `\n\nNote: This letter does not have a file attachment.`;
+    }
+    
+    if (!attachment_url && !document_attachment) {
+      emailContent += `\n\nNote: This letter does not have any file attachments.`;
     }
     
     emailContent += `\n\nSent from Letter Management System`;
@@ -80,19 +100,25 @@ export async function POST(request) {
             </div>
           </div>
 
-          ${attachment_url ? `
-            <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #2196f3;">
-              <strong>📎 Attachment Available:</strong><br>
-              <a href="${attachment_url}" style="color: #2196f3; text-decoration: none;" target="_blank">
-                Click here to download the attachment
+          ${document_attachment && document_attachment.url ? `
+            <div style="background-color: #e8f5e8; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #4caf50;">
+              <strong>� Document Attachment:</strong><br>
+              <div style="margin: 10px 0;">
+                <strong>File:</strong> ${document_attachment.name}<br>
+                <strong>Size:</strong> ${(document_attachment.size / 1024 / 1024).toFixed(2)} MB<br>
+                <strong>Type:</strong> ${document_attachment.type}
+              </div>
+              <a href="${document_attachment.url}" style="color: #4caf50; text-decoration: none; font-weight: bold;" target="_blank">
+                📥 Download Document
               </a>
-              <br><small style="color: #666;">Note: Please download the attachment from the link above.</small>
             </div>
-          ` : `
+          ` : ''}
+
+          ${!attachment_url && !document_attachment ? `
             <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #ffc107;">
-              <strong>ℹ️ Note:</strong> This letter does not have a file attachment.
+              <strong>ℹ️ Note:</strong> This letter does not have any file attachments.
             </div>
-          `}
+          ` : ''}
 
           <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 12px;">
             <p>This email was sent automatically from the Letter Management System.</p>

@@ -4,14 +4,22 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { FileText, Plus, Mail, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
-export const SidebarContent = () => {
+function SidebarContent() {
   const pathname = usePathname();
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === 'admin';
 
   const navigationItems = [
     { name: 'Dashboard', href: '/lettersystem', icon: LayoutDashboard },
     { name: 'Add Letter', href: '/lettersystem/add-letter', icon: Plus },
     { name: 'Letters', href: '/lettersystem/letters', icon: FileText },
+    // Only show to admins:
+    ...(isAdmin ? [
+      { name: 'Bureaus', href: '/lettersystem/bureaus', icon: Mail },
+      { name: 'Users & Roles', href: '/lettersystem/users', icon: FileText },
+    ] : []),
   ];
 
   const isActive = (href) => pathname === href;
@@ -58,7 +66,7 @@ export const SidebarContent = () => {
       </div>
     </div>
   );
-};
+}
 
 const Sidebar = () => {
   return (

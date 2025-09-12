@@ -88,8 +88,8 @@ export default function MonthlyBarChart({ monthlyData = [] }) {
       {
         label: 'Total Letters',
         data: monthlyData.map(item => item.total),
-        backgroundColor: 'rgba(40, 180, 180, 0.8)',
-        borderColor: 'rgba(40, 180, 180, 1)',
+        backgroundColor: 'rgba(59, 130, 246, 0.8)', // Blue
+        borderColor: 'rgba(59, 130, 246, 1)',
         borderWidth: 1,
         borderRadius: 4,
         borderSkipped: false,
@@ -97,8 +97,8 @@ export default function MonthlyBarChart({ monthlyData = [] }) {
       {
         label: 'Pending',
         data: monthlyData.map(item => item.pending),
-        backgroundColor: 'rgba(255, 193, 7, 0.8)',
-        borderColor: 'rgba(255, 193, 7, 1)',
+        backgroundColor: 'rgba(245, 158, 11, 0.8)', // Amber/Orange
+        borderColor: 'rgba(245, 158, 11, 1)',
         borderWidth: 1,
         borderRadius: 4,
         borderSkipped: false,
@@ -106,8 +106,8 @@ export default function MonthlyBarChart({ monthlyData = [] }) {
       {
         label: 'Sent',
         data: monthlyData.map(item => item.sent),
-        backgroundColor: 'rgba(34, 153, 153, 0.8)',
-        borderColor: 'rgba(34, 153, 153, 1)',
+        backgroundColor: 'rgba(34, 197, 94, 0.8)', // Green
+        borderColor: 'rgba(34, 197, 94, 1)',
         borderWidth: 1,
         borderRadius: 4,
         borderSkipped: false,

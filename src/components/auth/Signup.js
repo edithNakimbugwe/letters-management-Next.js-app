@@ -12,7 +12,8 @@ const Signup = () => {
     displayName: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    bureau: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,7 +30,7 @@ const Signup = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.email || !formData.password || !formData.confirmPassword || !formData.bureau) {
       setError('Please fill in all fields');
       return;
     }
@@ -47,7 +48,7 @@ const Signup = () => {
     try {
       setError('');
       setLoading(true);
-      await signup(formData.email, formData.password, formData.displayName);
+      await signup(formData.email, formData.password, formData.displayName, formData.bureau);
       router.push('/lettersystem');
     } catch (error) {
       setError(getAuthErrorMessage(error.code));
@@ -125,6 +126,31 @@ const Signup = () => {
                   value={formData.email}
                   onChange={handleChange}
                 />
+              </div>
+
+              <div>
+                <label htmlFor="bureau" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Bureau
+                </label>
+                <select
+                  id="bureau"
+                  name="bureau"
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 transition-all duration-200 focus:outline-none focus:ring-2 hover:border-gray-400"
+                  style={{ '--tw-ring-color': '#28b4b4' }}
+                  onFocus={(e) => e.target.style.borderColor = '#28b4b4'}
+                  value={formData.bureau}
+                  onChange={handleChange}
+                >
+                  <option value="">Select your bureau</option>
+                  <option value="Mobility">Mobility</option>
+                  <option value="Pathogen Economy">Pathogen Economy</option>
+                  <option value="Aeronautics-and-Space-science">Aeronautics and Space Science</option>
+                  <option value="Industry 4.0+">Industry 4.0+</option>
+                  <option value="Infrastructure-Innovations">Infrastructure Innovations</option>
+                  <option value="Import Substitution">Import Substitution</option>
+                  <option value="Productivity Acceleration">Productivity Acceleration</option>
+                </select>
               </div>
 
               <div>

@@ -10,25 +10,34 @@ export const initializeEmailJS = () => {
 
 /**
  * Send an email with attachment using our API route
- * @param {Object} emailData - Email data
+ * @param {Object} emailData - Email data including document attachment
  * @returns {Promise<Object>} - Response object
  */
 export const sendEmailWithAttachment = async (emailData) => {
   try {
     console.log('Sending email request to API...');
     
+    const requestBody = {
+      to_email: emailData.to_email,
+      subject: emailData.subject || `Letter: ${emailData.letter_title}`,
+      message: emailData.message,
+      attachment_url: emailData.attachment_url, // OCR image attachment
+      document_attachment: emailData.document_attachment, // Document attachment metadata
+      letter_title: emailData.letter_title,
+    };
+
+    console.log('Request payload:', {
+      ...requestBody,
+      has_document: !!requestBody.document_attachment,
+      has_attachment: !!requestBody.attachment_url
+    });
+    
     const response = await fetch('/api/send-email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        to_email: emailData.to_email,
-        subject: emailData.subject || `Letter: ${emailData.letter_title}`,
-        message: emailData.message,
-        attachment_url: emailData.attachment_url,
-        letter_title: emailData.letter_title,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const result = await response.json();
@@ -51,19 +60,28 @@ export const sendEmailWithAttachment = async (emailData) => {
 
 /**
  * Fallback: Send email using mailto (backup method)
- * @param {Object} emailData - Email data
+ * @param {Object} emailData - Email data including document attachment
  * @returns {Promise<Object>} - Response object
  */
 export const sendEmailWithMailto = async (emailData) => {
   try {
-    // Build email body with or without attachment
+    // Build email body with all attachments
     let emailBody = emailData.message || `Please find the letter: ${emailData.letter_title}`;
     
     if (emailData.attachment_url) {
-      emailBody += `\n\nAttachment URL: ${emailData.attachment_url}`;
-      emailBody += `\n\nNote: Please download the attachment from the link above.`;
+      emailBody += `\n\nOCR Image URL: ${emailData.attachment_url}`;
+    }
+    
+    if (emailData.document_attachment && emailData.document_attachment.url) {
+      emailBody += `\n\nDocument Attachment: ${emailData.document_attachment.name}`;
+      emailBody += `\n\nDocument URL: ${emailData.document_attachment.url}`;
+      emailBody += `\n\nFile Size: ${(emailData.document_attachment.size / 1024 / 1024).toFixed(2)} MB`;
+    }
+    
+    if (!emailData.attachment_url && !emailData.document_attachment) {
+      emailBody += `\n\nNote: This letter does not have any file attachments.`;
     } else {
-      emailBody += `\n\nNote: This letter does not have a file attachment.`;
+      emailBody += `\n\nNote: Please download the attachments from the links above.`;
     }
     
     emailBody += `\n\nSent from Letter Management System`;

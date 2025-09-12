@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Loader2, Download } from 'lucide-react';
 import { sendEmailWithAttachment, sendEmailWithDownloadLink, validateEmail } from '../../services/email';
+import { getBureaus } from '@/services/firestore';
 
 export default function SendEmailModal({ isOpen, onClose, letter }) {
   const [loading, setLoading] = useState(false);
@@ -13,6 +14,29 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
     subject: '',
     message: ''
   });
+  const [bureaus, setBureaus] = useState([]);
+  const [selectedBureau, setSelectedBureau] = useState('');
+  const [bureauMembers, setBureauMembers] = useState([]);
+  // Fetch bureaus on mount
+  useEffect(() => {
+    async function fetchBureaus() {
+      const data = await getBureaus();
+      setBureaus(data);
+    }
+    fetchBureaus();
+  }, []);
+
+  // Update members when bureau changes
+  useEffect(() => {
+    if (selectedBureau) {
+      const bureau = bureaus.find(b => b.id === selectedBureau);
+      setBureauMembers(bureau ? bureau.members : []);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    } else {
+      setBureauMembers([]);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    }
+  }, [selectedBureau, bureaus]);
 
   // Update emailData when letter changes
   useEffect(() => {
@@ -46,8 +70,9 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
       return;
     }
 
-    if (!letter?.attachmentUrl) {
-      setError('No attachment found for this letter');
+    // Check if letter has any attachments (OCR file stored as documentMetadata or legacy attachmentUrl)
+    if (!letter?.attachmentUrl && !letter?.documentMetadata) {
+      setError('No attachments found for this letter');
       return;
     }
 
@@ -60,7 +85,8 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
         to_email: emailData.to_email,
         subject: emailData.subject,
         message: emailData.message,
-        attachment_url: letter.attachmentUrl,
+        attachment_url: letter.attachmentUrl, // Legacy OCR image URL
+        document_attachment: letter.documentMetadata, // Main attachment (OCR file or document)
         letter_title: letter.title,
         from_name: 'Letter Management System'
       });
@@ -83,8 +109,9 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
   };
 
   const handleDownloadFile = async () => {
-    if (!letter?.attachmentUrl) {
-      setError('No attachment found for this letter');
+    // Check if letter has any attachments
+    if (!letter?.attachmentUrl && !letter?.documentMetadata) {
+      setError('No attachments found for this letter');
       return;
     }
 
@@ -93,10 +120,24 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
       setError('');
       setSuccess('');
 
-      await sendEmailWithDownloadLink({
-        attachment_url: letter.attachmentUrl,
-        letter_title: letter.title
-      });
+      // Download OCR attachment if available
+      if (letter.attachmentUrl) {
+        await sendEmailWithDownloadLink({
+          attachment_url: letter.attachmentUrl,
+          letter_title: letter.title + ' (OCR Image)'
+        });
+      }
+
+      // Download document attachment if available
+      if (letter.documentMetadata?.url) {
+        const link = document.createElement('a');
+        link.href = letter.documentMetadata.url;
+        link.download = letter.documentMetadata.name || 'document';
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
 
       setSuccess('File download initiated!');
       
@@ -141,9 +182,28 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
             <p className="text-sm text-gray-600">
               <span className="font-medium">From:</span> {letter?.senderName || 'N/A'}
             </p>
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">Attachment:</span> {letter?.attachmentUrl ? 'Available' : 'Not available'}
-            </p>
+            
+            {/* Attachment Information */}
+            <div className="mt-2 space-y-1">
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">Attachments:</span>
+              </p>
+              {letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-green-600">
+                  � Attachment: {letter.documentMetadata.name} ({(letter.documentMetadata.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+              {letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-blue-600">
+                  � Legacy Attachment: Available
+                </div>
+              )}
+              {!letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-gray-500">
+                  No attachments available
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Error/Success Messages */}
@@ -162,19 +222,41 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
           {/* Email Form */}
           <form onSubmit={handleSendEmail} className="space-y-4">
             <div>
+              <label htmlFor="bureau" className="block text-sm font-medium text-gray-700 mb-1">
+                Bureau *
+              </label>
+              <select
+                id="bureau"
+                name="bureau"
+                value={selectedBureau}
+                onChange={e => setSelectedBureau(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
+              >
+                <option value="">Select a bureau</option>
+                {bureaus.map(bureau => (
+                  <option key={bureau.id} value={bureau.id}>{bureau.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label htmlFor="to_email" className="block text-sm font-medium text-gray-700 mb-1">
                 Recipient Email *
               </label>
-              <input
-                type="email"
+              <select
                 id="to_email"
                 name="to_email"
                 value={emailData.to_email}
                 onChange={handleInputChange}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
-                placeholder="recipient@example.com"
-              />
+                disabled={!selectedBureau || bureauMembers.length === 0}
+              >
+                <option value="">{!selectedBureau ? 'Select a bureau first' : bureauMembers.length === 0 ? 'No members in this bureau' : 'Select an email'}</option>
+                {bureauMembers.map((email, idx) => (
+                  <option key={idx} value={email}>{email}</option>
+                ))}
+              </select>
             </div>
 
             <div>
