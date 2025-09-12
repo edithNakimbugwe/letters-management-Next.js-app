@@ -12,6 +12,7 @@ export const SidebarContent = () => {
     { name: 'Dashboard', href: '/lettersystem', icon: LayoutDashboard },
     { name: 'Add Letter', href: '/lettersystem/add-letter', icon: Plus },
     { name: 'Letters', href: '/lettersystem/letters', icon: FileText },
+    { name: 'Bureaus', href: '/lettersystem/bureaus', icon: Mail },
   ];
 
   const isActive = (href) => pathname === href;

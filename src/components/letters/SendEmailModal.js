@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Loader2, Download } from 'lucide-react';
 import { sendEmailWithAttachment, sendEmailWithDownloadLink, validateEmail } from '../../services/email';
+import { getBureaus } from '@/services/firestore';
 
 export default function SendEmailModal({ isOpen, onClose, letter }) {
   const [loading, setLoading] = useState(false);
@@ -13,6 +14,29 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
     subject: '',
     message: ''
   });
+  const [bureaus, setBureaus] = useState([]);
+  const [selectedBureau, setSelectedBureau] = useState('');
+  const [bureauMembers, setBureauMembers] = useState([]);
+  // Fetch bureaus on mount
+  useEffect(() => {
+    async function fetchBureaus() {
+      const data = await getBureaus();
+      setBureaus(data);
+    }
+    fetchBureaus();
+  }, []);
+
+  // Update members when bureau changes
+  useEffect(() => {
+    if (selectedBureau) {
+      const bureau = bureaus.find(b => b.id === selectedBureau);
+      setBureauMembers(bureau ? bureau.members : []);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    } else {
+      setBureauMembers([]);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    }
+  }, [selectedBureau, bureaus]);
 
   // Update emailData when letter changes
   useEffect(() => {
@@ -198,19 +222,41 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
           {/* Email Form */}
           <form onSubmit={handleSendEmail} className="space-y-4">
             <div>
+              <label htmlFor="bureau" className="block text-sm font-medium text-gray-700 mb-1">
+                Bureau *
+              </label>
+              <select
+                id="bureau"
+                name="bureau"
+                value={selectedBureau}
+                onChange={e => setSelectedBureau(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
+              >
+                <option value="">Select a bureau</option>
+                {bureaus.map(bureau => (
+                  <option key={bureau.id} value={bureau.id}>{bureau.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label htmlFor="to_email" className="block text-sm font-medium text-gray-700 mb-1">
                 Recipient Email *
               </label>
-              <input
-                type="email"
+              <select
                 id="to_email"
                 name="to_email"
                 value={emailData.to_email}
                 onChange={handleInputChange}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
-                placeholder="recipient@example.com"
-              />
+                disabled={!selectedBureau || bureauMembers.length === 0}
+              >
+                <option value="">{!selectedBureau ? 'Select a bureau first' : bureauMembers.length === 0 ? 'No members in this bureau' : 'Select an email'}</option>
+                {bureauMembers.map((email, idx) => (
+                  <option key={idx} value={email}>{email}</option>
+                ))}
+              </select>
             </div>
 
             <div>

@@ -3,10 +3,39 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Loader2, Download } from 'lucide-react';
 import { sendEmailWithAttachment, sendEmailWithMailto, sendEmailWithDownloadLink, validateEmail } from '../../services/email';
-import { trackLetterSend } from '../../services/firestore';
+import { trackLetterSend, getBureaus } from '../../services/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate }) {
+  const [bureaus, setBureaus] = useState([]);
+  const [bureauMembers, setBureauMembers] = useState([]);
+  const [emailData, setEmailData] = useState({
+    to_email: '',
+    subject: '',
+    message: '',
+    bureau: ''
+  });
+
+  // Fetch bureaus on mount
+  useEffect(() => {
+    async function fetchBureaus() {
+      const data = await getBureaus();
+      setBureaus(data);
+    }
+    fetchBureaus();
+  }, []);
+
+  // Update members when bureau changes
+  useEffect(() => {
+    if (emailData.bureau) {
+      const bureau = bureaus.find(b => b.name === emailData.bureau);
+      setBureauMembers(bureau ? bureau.members : []);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    } else {
+      setBureauMembers([]);
+      setEmailData(prev => ({ ...prev, to_email: '' }));
+    }
+  }, [emailData.bureau, bureaus]);
   const { user } = useAuth();
   console.log('Modal render - isOpen:', isOpen, 'letter:', letter); // Debug log
   console.log('Letter attachment data:', {
@@ -57,12 +86,6 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [emailData, setEmailData] = useState({
-    to_email: '',
-    subject: '',
-    message: '',
-    bureau: ''
-  });
 
   // Update emailData when letter changes
   useEffect(() => {
@@ -259,20 +282,43 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
 
           {/* Email Form */}
           <form onSubmit={handleSendEmail} className="space-y-4">
+
+            <div>
+              <label htmlFor="bureau" className="block text-sm font-medium text-gray-700 mb-1">
+                Bureau (To Send To) *
+              </label>
+              <select
+                id="bureau"
+                name="bureau"
+                value={emailData.bureau}
+                onChange={handleInputChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
+              >
+                <option value="">Select bureau to send to</option>
+                {bureaus.map(bureau => (
+                  <option key={bureau.id} value={bureau.name}>{bureau.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label htmlFor="to_email" className="block text-sm font-medium text-gray-700 mb-1">
                 Recipient Email *
               </label>
-              <input
-                type="email"
+              <select
                 id="to_email"
                 name="to_email"
                 value={emailData.to_email}
                 onChange={handleInputChange}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
-                placeholder="recipient@example.com"
-              />
+                disabled={!emailData.bureau || bureauMembers.length === 0}
+              >
+                <option value="">{!emailData.bureau ? 'Select a bureau first' : bureauMembers.length === 0 ? 'No members in this bureau' : 'Select an email'}</option>
+                {bureauMembers.map((email, idx) => (
+                  <option key={idx} value={email}>{email}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -289,28 +335,6 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
               />
             </div>
 
-            <div>
-              <label htmlFor="bureau" className="block text-sm font-medium text-gray-700 mb-1">
-                Bureau (To Send To) *
-              </label>
-              <select
-                id="bureau"
-                name="bureau"
-                value={emailData.bureau}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#28b4b4] focus:border-transparent"
-              >
-                <option value="">Select bureau to send to</option>
-                <option value="Mobility">Mobility</option>
-                <option value="Pathogen Economy">Pathogen Economy</option>
-                <option value="Aeronautics-and-Space-science">Aeronautics and Space Science</option>
-                <option value="Industry 4.0+">Industry 4.0+</option>
-                <option value="Infrastructure-Innovations">Infrastructure Innovations</option>
-                <option value="Import Substitution">Import Substitution</option>
-                <option value="Productivity Acceleration">Productivity Acceleration</option>
-              </select>
-            </div>
 
             <div>
               <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">

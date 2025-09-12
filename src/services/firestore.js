@@ -1,3 +1,32 @@
+// Bureaus Collection Functions
+export const addBureau = async ({ name, members, addedBy }) => {
+  try {
+    const bureausRef = collection(db, 'bureaus');
+    const createdAt = serverTimestamp();
+    const docRef = await addDoc(bureausRef, {
+      name,
+      members,
+      addedBy,
+      createdAt,
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error adding bureau:', error);
+    throw error;
+  }
+};
+
+export const getBureaus = async () => {
+  try {
+    const bureausRef = collection(db, 'bureaus');
+    const q = query(bureausRef, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error fetching bureaus:', error);
+    return [];
+  }
+};
 import { db } from '../firebase-config/firebase';
 import { 
   collection, 
