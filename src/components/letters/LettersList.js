@@ -29,6 +29,17 @@ export default function LettersList() {
     try {
       setLoading(true);
       const fetchedLetters = await getLetters(user.uid);
+      console.log('Fetched letters with attachment data:', fetchedLetters.map(letter => ({
+        id: letter.id,
+        title: letter.title,
+        extractedFromImage: letter.extractedFromImage,
+        hasAttachment: letter.hasAttachment,
+        attachmentUrl: letter.attachmentUrl,
+        hasDocument: letter.hasDocument,
+        documentMetadata: letter.documentMetadata,
+        originalFileMetadata: letter.originalFileMetadata
+      })));
+      console.log('Full letter objects from Firestore:', JSON.stringify(fetchedLetters, null, 2));
       setLetters(fetchedLetters);
     } catch (err) {
       console.error('Error fetching letters:', err);
@@ -91,18 +102,18 @@ export default function LettersList() {
     }
   };
 
-  const handleRowClick = (letter) => {
-    console.log('Row clicked!', letter); // Debug log
-    // Find the original letter from the letters array to get all fields
-    const originalLetter = letters.find(l => l.id === letter.id);
-    console.log('Original letter:', originalLetter); // Debug log
+  const handleRowClick = (letterRow) => {
+    console.log('Row clicked! Letter row:', letterRow); // Debug log
+    // Find the original letter from the letters array to get all fields including attachment metadata
+    const originalLetter = letters.find(l => l.id === letterRow.id);
+    console.log('Original letter found:', originalLetter); // Debug log
+    
     if (originalLetter) {
       setSelectedLetter(originalLetter);
       setShowEmailModal(true);
     } else {
-      // For testing, use the row data if original letter not found
-      setSelectedLetter(letter);
-      setShowEmailModal(true);
+      console.error('Could not find original letter for ID:', letterRow.id);
+      console.error('Available letters:', letters.map(l => ({ id: l.id, title: l.title })));
     }
   };
 
@@ -189,6 +200,7 @@ export default function LettersList() {
                   <SortableHeader label="From" columnKey="from" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="To" columnKey="to" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Contact" columnKey="contact" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
+                  <th className="px-3 py-3 text-left font-medium">Attachment</th>
                   <SortableHeader label="Urgency" columnKey="urgency" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Status" columnKey="status" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Bureau" columnKey="bureau" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
@@ -198,18 +210,20 @@ export default function LettersList() {
               <tbody>
                 {filteredAndSortedLetters.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-6 text-center text-gray-500" colSpan={9}>
+                    <td className="px-3 py-6 text-center text-gray-500" colSpan={10}>
                       {letters.length === 0 ? 'No letters found. Add your first letter!' : 'No letters match your search.'}
                     </td>
                   </tr>
                 ) : (
                   filteredAndSortedLetters.map((row, index) => {
                     const originalLetter = letters.find(l => l.id === row.id);
-                    const hasAttachment = originalLetter?.attachmentUrl;
+                    const hasOCRAttachment = originalLetter?.attachmentUrl;
+                    const hasDocument = originalLetter?.documentMetadata;
+                    const hasAnyAttachment = hasOCRAttachment || hasDocument;
                     const hasReceiverEmail = originalLetter?.receiverEmail;
                     
-                    // Allow clicking if there's an attachment OR receiver email (at least one)
-                    const canSendEmail = hasAttachment || hasReceiverEmail;
+                    // Allow clicking if there's any attachment OR receiver email (at least one)
+                    const canSendEmail = hasAnyAttachment || hasReceiverEmail;
                     
                     return (
                       <tr 
@@ -223,14 +237,17 @@ export default function LettersList() {
                         <td className="px-3 py-3 whitespace-nowrap max-w-[360px]">
                           <div className="flex items-center gap-2">
                             <div className="truncate" title={row.title}>{row.title}</div>
-                            {hasAttachment && (
-                              <div className="flex gap-1">
-                                <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">📎</span>
-                                {hasReceiverEmail && (
-                                  <Mail className="h-3 w-3" style={{ color: '#28b4b4' }} title="Can send via email" />
-                                )}
-                              </div>
-                            )}
+                            <div className="flex gap-1">
+                              {hasOCRAttachment && (
+                                <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded" title="OCR Image">📷</span>
+                              )}
+                              {hasDocument && (
+                                <span className="text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded" title="Document Attachment">�</span>
+                              )}
+                              {hasReceiverEmail && (
+                                <Mail className="h-3 w-3" style={{ color: '#28b4b4' }} title="Can send via email" />
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
@@ -241,6 +258,25 @@ export default function LettersList() {
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
                           <div className="truncate" title={row.contact}>{row.contact}</div>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap max-w-[200px]">
+                          <div className="flex items-center gap-1">
+                            {originalLetter?.documentMetadata ? (
+                              <div className="flex items-center gap-1" title={`Attachment: ${originalLetter.documentMetadata.name}`}>
+                                <span className="text-green-600">📄</span>
+                                <span className="text-xs text-gray-600 truncate max-w-[120px]">
+                                  {originalLetter.documentMetadata.name}
+                                </span>
+                              </div>
+                            ) : originalLetter?.attachmentUrl ? (
+                              <div className="flex items-center gap-1" title="Legacy attachment available">
+                                <span className="text-blue-600">�</span>
+                                <span className="text-xs text-gray-600">Attachment</span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">No attachment</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-3 capitalize">{row.urgency}</td>
                         <td className="px-3 py-3">

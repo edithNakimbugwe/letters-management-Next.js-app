@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { createLetter } from '../../services/firestore';
-import { uploadFile, generateFileName } from '../../services/storage';
+import { uploadFile, generateFileName, uploadLetterDocument } from '../../services/storage';
 import { Button } from '../ui/button';
 import { useRouter } from 'next/navigation';
 import { createWorker } from 'tesseract.js';
@@ -42,16 +42,19 @@ const AddLetterForm = () => {
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
+    console.log('File selected:', file ? { name: file.name, size: file.size, type: file.type } : 'No file');
     if (file) {
       const fileType = file.type;
       const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'application/pdf'];
       
       if (validTypes.includes(fileType)) {
         setSelectedFile(file);
+        console.log('✅ File accepted and set as selectedFile');
         setError('');
       } else {
         setError('Please select a valid image file (JPEG, PNG, GIF, BMP) or PDF');
         setSelectedFile(null);
+        console.log('❌ File rejected - invalid type');
       }
     }
   };
@@ -285,6 +288,18 @@ const AddLetterForm = () => {
   };
 
   const handleConfirmSubmit = async () => {
+    console.log('🚀 === STARTING LETTER SUBMISSION ===');
+    console.log('📤 User:', user ? { uid: user.uid, email: user.email } : '❌ No user');
+    console.log('📁 Selected file:', selectedFile ? { name: selectedFile.name, size: selectedFile.size, type: selectedFile.type } : '❌ No file selected');
+    console.log('📝 Form data:', formData);
+    
+    // Critical check: Ensure we have a user
+    if (!user) {
+      setError('❌ User not logged in. Please refresh and try again.');
+      setLoading(false);
+      return;
+    }
+    
     try {
       setError('');
       setSuccess('');
@@ -292,19 +307,28 @@ const AddLetterForm = () => {
       setShowConfirmModal(false);
 
       let attachmentUrl = null;
+      let documentMetadata = null;
       
-      // Upload file if one was selected
+      // Upload file if one was selected (either for OCR or as attachment)
       if (selectedFile) {
+        console.log('📤 ENTERING FILE UPLOAD BLOCK');
+        console.log('📤 File details:', { name: selectedFile.name, size: selectedFile.size, type: selectedFile.type });
         try {
-          const fileName = generateFileName(selectedFile.name, user.uid);
-          attachmentUrl = await uploadFile(selectedFile, fileName);
-          console.log('File uploaded successfully:', attachmentUrl);
+          console.log('🔄 About to upload file:', selectedFile.name, 'Size:', selectedFile.size, 'Type:', selectedFile.type);
+          // Use uploadLetterDocument to get proper metadata for email attachments
+          documentMetadata = await uploadLetterDocument(selectedFile, user.uid);
+          attachmentUrl = documentMetadata.url; // Keep for backward compatibility
+          console.log('✅ File uploaded successfully as attachment:', documentMetadata);
         } catch (uploadError) {
-          console.error('Error uploading file:', uploadError);
-          setError('Failed to upload file. Please try again.');
+          console.error('❌ Error uploading file:', uploadError);
+          setError(`Failed to upload file: ${uploadError.message}`);
           setLoading(false);
           return;
         }
+      } else {
+        console.log('⚠️  NO FILE SELECTED - proceeding without attachment');
+        console.log('⚠️  selectedFile value:', selectedFile);
+        console.log('⚠️  typeof selectedFile:', typeof selectedFile);
       }
 
       const letterData = {
@@ -312,9 +336,22 @@ const AddLetterForm = () => {
         dateReceived: new Date(formData.dateReceived),
         status: 'received', // Default status
         extractedFromImage: !!selectedFile, // Track if this was extracted from an image
-        attachmentUrl, // Store the file URL
+        attachmentUrl, // Store the file URL (backward compatibility)
         hasAttachment: !!attachmentUrl, // Boolean flag for easier querying
+        documentMetadata, // Store document metadata (main attachment)
+        hasDocument: !!documentMetadata, // Boolean flag for document existence
+        // Additional field to clearly indicate original uploaded file
+        originalFileMetadata: documentMetadata, // The original uploaded file for OCR or attachment
       };
+
+      console.log('📋 FINAL LETTER DATA BEING SAVED:');
+      console.log('📋 extractedFromImage:', letterData.extractedFromImage);
+      console.log('📋 attachmentUrl:', letterData.attachmentUrl);
+      console.log('📋 hasAttachment:', letterData.hasAttachment);
+      console.log('📋 documentMetadata:', letterData.documentMetadata);
+      console.log('📋 hasDocument:', letterData.hasDocument);
+      console.log('📋 originalFileMetadata:', letterData.originalFileMetadata);
+      console.log('📋 About to save letter with data:', JSON.stringify(letterData, null, 2));
 
       await createLetter(letterData, user);
       
@@ -358,7 +395,8 @@ const AddLetterForm = () => {
         <div className="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
           <h3 className="text-lg font-semibold mb-4 text-blue-800">OCR - Extract Text from Image/PDF</h3>
           <p className="text-sm text-blue-600 mb-4">
-            Upload an image or PDF of a letter to automatically extract text and populate the form fields below.
+            Upload an image or PDF of a letter to automatically extract text and populate the form fields below. 
+            This file will also be stored as the letter attachment for email sending.
           </p>
           
           <div className="space-y-4">

@@ -7,6 +7,50 @@ import { updateLetterStatus } from '../../services/firestore';
 
 export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate }) {
   console.log('Modal render - isOpen:', isOpen, 'letter:', letter); // Debug log
+  console.log('Letter attachment data:', {
+    extractedFromImage: letter?.extractedFromImage,
+    hasAttachment: letter?.hasAttachment,
+    attachmentUrl: letter?.attachmentUrl,
+    hasDocument: letter?.hasDocument,
+    documentMetadata: letter?.documentMetadata,
+    originalFileMetadata: letter?.originalFileMetadata
+  }); // Debug log
+  if (letter && isOpen) {
+    console.log('=== DEBUGGING LETTER OBJECT ===');
+    console.log('Full letter object keys:', Object.keys(letter));
+    console.log('Full letter object (pretty print):');
+    console.log(JSON.stringify(letter, null, 2));
+    console.log('=== END LETTER OBJECT DEBUG ===');
+  }
+
+  // Helper function to get the main attachment for the letter
+  const getMainAttachment = (letter) => {
+    // Priority: documentMetadata (new format) > originalFileMetadata > attachmentUrl (legacy)
+    if (letter?.documentMetadata) {
+      return {
+        type: 'document',
+        metadata: letter.documentMetadata,
+        url: letter.documentMetadata.url
+      };
+    }
+    if (letter?.originalFileMetadata) {
+      return {
+        type: 'original',
+        metadata: letter.originalFileMetadata,
+        url: letter.originalFileMetadata.url
+      };
+    }
+    if (letter?.attachmentUrl) {
+      return {
+        type: 'legacy',
+        url: letter.attachmentUrl
+      };
+    }
+    return null;
+  };
+
+  const mainAttachment = getMainAttachment(letter);
+  console.log('Main attachment detected:', mainAttachment);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -51,6 +95,12 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
       return;
     }
 
+    // Check if letter has any attachments (OCR file stored as documentMetadata or legacy attachmentUrl)
+    if (!mainAttachment) {
+      setError('No attachments found for this letter');
+      return;
+    }
+
     if (!emailData.bureau) {
       setError('Please select the bureau to send the letter to');
       return;
@@ -65,7 +115,8 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
         to_email: emailData.to_email,
         subject: emailData.subject,
         message: emailData.message,
-        attachment_url: letter?.attachmentUrl || null,
+        attachment_url: letter?.attachmentUrl || null, // Legacy OCR image URL
+        document_attachment: letter?.documentMetadata || null, // Main attachment (OCR file or document)
         letter_title: letter?.title || 'Letter',
         from_name: 'Letter Management System'
       });
@@ -165,9 +216,28 @@ export default function SendEmailModal({ isOpen, onClose, letter, onStatusUpdate
             <p className="text-sm text-gray-600">
               <span className="font-medium">From:</span> {letter?.senderName || 'N/A'}
             </p>
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">Attachment:</span> {letter?.attachmentUrl ? 'Available' : 'Not available'}
-            </p>
+            
+            {/* Attachment Information */}
+            <div className="mt-2 space-y-1">
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">Attachments:</span>
+              </p>
+              {letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-green-600">
+                  � Attachment: {letter.documentMetadata.name} ({(letter.documentMetadata.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+              {letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-blue-600">
+                  � Legacy Attachment: Available
+                </div>
+              )}
+              {!letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-gray-500">
+                  No attachments available
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Error/Success Messages */}

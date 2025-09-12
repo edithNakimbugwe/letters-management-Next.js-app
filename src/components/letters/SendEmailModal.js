@@ -46,8 +46,9 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
       return;
     }
 
-    if (!letter?.attachmentUrl) {
-      setError('No attachment found for this letter');
+    // Check if letter has any attachments (OCR file stored as documentMetadata or legacy attachmentUrl)
+    if (!letter?.attachmentUrl && !letter?.documentMetadata) {
+      setError('No attachments found for this letter');
       return;
     }
 
@@ -60,7 +61,8 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
         to_email: emailData.to_email,
         subject: emailData.subject,
         message: emailData.message,
-        attachment_url: letter.attachmentUrl,
+        attachment_url: letter.attachmentUrl, // Legacy OCR image URL
+        document_attachment: letter.documentMetadata, // Main attachment (OCR file or document)
         letter_title: letter.title,
         from_name: 'Letter Management System'
       });
@@ -83,8 +85,9 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
   };
 
   const handleDownloadFile = async () => {
-    if (!letter?.attachmentUrl) {
-      setError('No attachment found for this letter');
+    // Check if letter has any attachments
+    if (!letter?.attachmentUrl && !letter?.documentMetadata) {
+      setError('No attachments found for this letter');
       return;
     }
 
@@ -93,10 +96,24 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
       setError('');
       setSuccess('');
 
-      await sendEmailWithDownloadLink({
-        attachment_url: letter.attachmentUrl,
-        letter_title: letter.title
-      });
+      // Download OCR attachment if available
+      if (letter.attachmentUrl) {
+        await sendEmailWithDownloadLink({
+          attachment_url: letter.attachmentUrl,
+          letter_title: letter.title + ' (OCR Image)'
+        });
+      }
+
+      // Download document attachment if available
+      if (letter.documentMetadata?.url) {
+        const link = document.createElement('a');
+        link.href = letter.documentMetadata.url;
+        link.download = letter.documentMetadata.name || 'document';
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
 
       setSuccess('File download initiated!');
       
@@ -141,9 +158,28 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
             <p className="text-sm text-gray-600">
               <span className="font-medium">From:</span> {letter?.senderName || 'N/A'}
             </p>
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">Attachment:</span> {letter?.attachmentUrl ? 'Available' : 'Not available'}
-            </p>
+            
+            {/* Attachment Information */}
+            <div className="mt-2 space-y-1">
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">Attachments:</span>
+              </p>
+              {letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-green-600">
+                  � Attachment: {letter.documentMetadata.name} ({(letter.documentMetadata.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+              {letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-blue-600">
+                  � Legacy Attachment: Available
+                </div>
+              )}
+              {!letter?.attachmentUrl && !letter?.documentMetadata && (
+                <div className="ml-4 text-xs text-gray-500">
+                  No attachments available
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Error/Success Messages */}

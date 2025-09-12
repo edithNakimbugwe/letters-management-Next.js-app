@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createWorker } from 'tesseract.js';
 import { useAuth } from '@/contexts/AuthContext';
 import { createLetter } from '@/services/firestore';
+import { uploadLetterDocument } from '@/services/storage';
 import { useRouter } from 'next/navigation';
 
 export default function AddLetterPage() {
@@ -352,11 +353,35 @@ export default function AddLetterPage() {
   };
 
   const handleConfirmSubmit = async () => {
+    console.log('🚀 === STARTING LETTER SUBMISSION (PAGE.JSX) ===');
+    console.log('📁 Selected file:', selectedFile ? { name: selectedFile.name, size: selectedFile.size, type: selectedFile.type } : '❌ No file selected');
+    console.log('📤 User:', user ? { uid: user.uid, email: user.email } : '❌ No user');
+    
     try {
       setError('');
       setSuccess('');
       setSaving(true);
       setShowConfirmModal(false);
+
+      let attachmentUrl = null;
+      let documentMetadata = null;
+      
+      // Upload file if one was selected (for OCR)
+      if (selectedFile) {
+        try {
+          console.log('🔄 Uploading OCR file to Firebase Storage...');
+          documentMetadata = await uploadLetterDocument(selectedFile, user.uid);
+          attachmentUrl = documentMetadata.url; // Keep for backward compatibility
+          console.log('✅ File uploaded successfully:', documentMetadata);
+        } catch (uploadError) {
+          console.error('❌ Error uploading file:', uploadError);
+          setError(`Failed to upload file: ${uploadError.message}`);
+          setSaving(false);
+          return;
+        }
+      } else {
+        console.log('⚠️  No file selected - proceeding without attachment');
+      }
 
       // Convert your original fields to the firebase structure
       const letterData = {
@@ -371,7 +396,15 @@ export default function AddLetterPage() {
         dateReceived: formData.date ? new Date(formData.date) : new Date(),
         status: 'received',
         extractedFromImage: !!selectedFile,
+        // ADD ATTACHMENT FIELDS
+        attachmentUrl, // Store the file URL (backward compatibility)
+        hasAttachment: !!attachmentUrl, // Boolean flag for easier querying
+        documentMetadata, // Store document metadata (main attachment)
+        hasDocument: !!documentMetadata, // Boolean flag for document existence
+        originalFileMetadata: documentMetadata, // The original uploaded file for OCR
       };
+
+      console.log('📋 Final letter data with attachments:', JSON.stringify(letterData, null, 2));
 
       await createLetter(letterData, user);
       

@@ -85,6 +85,10 @@ export const updateUserDocument = async (uid, updates) => {
 
 // Letters Collection Functions
 export const createLetter = async (letterData, currentUser) => {
+  console.log('=== CREATING LETTER IN FIRESTORE ===');
+  console.log('Letter data received:', JSON.stringify(letterData, null, 2));
+  console.log('Current user:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'No user');
+  
   if (!currentUser) {
     throw new Error('User must be logged in to create a letter');
   }
@@ -93,6 +97,7 @@ export const createLetter = async (letterData, currentUser) => {
     // Get the current user's document to get their full name and bureau
     const userDoc = await getUserDocument(currentUser.uid);
     const receivedBy = userDoc?.displayName || currentUser.displayName || currentUser.email;
+    console.log('User document data:', userDoc);
     
     const letterDbData = {
       ...letterData,
@@ -101,6 +106,8 @@ export const createLetter = async (letterData, currentUser) => {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
+    
+    console.log('Final letter data for Firestore:', JSON.stringify(letterDbData, null, 2));
     
     // If status is 'received' and user has bureau, add it to the letter
     if (letterData.status === 'received' && userDoc?.bureau) {
@@ -116,6 +123,7 @@ export const createLetter = async (letterData, currentUser) => {
     const letterRef = await addDoc(collection(db, 'letters'), letterDbData);
     
     console.log('Letter created successfully with ID:', letterRef.id);
+    console.log('=== LETTER CREATION COMPLETED ===');
     return letterRef;
   } catch (error) {
     console.error('Error creating letter:', error);
