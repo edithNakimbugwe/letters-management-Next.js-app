@@ -7,7 +7,9 @@ import {
   createUserWithEmailAndPassword, 
   signOut, 
   sendPasswordResetEmail,
-  updateProfile
+  updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { auth } from '../firebase-config/firebase';
 import { createUserDocument, getUserDocument } from '../services/firestore';
@@ -41,6 +43,34 @@ export const AuthProvider = ({ children }) => {
       
       return result;
     } catch (error) {
+      throw error;
+    }
+  };
+
+  // Sign in/up with Google
+  const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      // Always attempt to create user document after Google sign-in
+      if (result && result.user) {
+        try {
+          await createUserDocument(result.user, { displayName: result.user.displayName || '', bureau: '' });
+        } catch (docError) {
+          console.error('createUserDocument failed after Google sign-in:', docError);
+          throw docError;
+        }
+      }
+      return result;
+    } catch (error) {
+      if (error && error.code === 'auth/cancelled-popup-request') {
+        // Silently ignore this error, do not log or throw
+        return null;
+      }
+      console.error('Google sign-in failed:', error);
+      if (error && error.code) {
+        console.error('Google sign-in error code:', error.code);
+      }
       throw error;
     }
   };
@@ -132,7 +162,8 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     resetPassword,
-    updateUserProfile
+    updateUserProfile,
+    signInWithGoogle
   };
 
   return (

@@ -159,9 +159,9 @@ export default function SendEmailModal({ isOpen, onClose, letter }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-1 sm:p-4">
+      <div className="bg-white rounded-lg w-full max-w-md max-h-[95dvh] flex flex-col overflow-y-auto" style={{ maxHeight: '95dvh' }}>
+        <div className="p-3 flex flex-col h-full" style={{ fontSize: '0.97rem', maxHeight: '70dvh', overflowY: 'auto' }}>
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900">Send Letter via Email</h2>

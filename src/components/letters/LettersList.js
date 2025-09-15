@@ -19,6 +19,18 @@ export default function LettersList() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [selectedLetter, setSelectedLetter] = useState(null);
 
+  // Prevent horizontal scroll on body when modal is open (mobile fix)
+  useEffect(() => {
+    if (showEmailModal) {
+      document.body.style.overflowX = 'hidden';
+    } else {
+      document.body.style.overflowX = '';
+    }
+    return () => {
+      document.body.style.overflowX = '';
+    };
+  }, [showEmailModal]);
+
   useEffect(() => {
     fetchLetters();
   }, [user]);
@@ -160,14 +172,14 @@ export default function LettersList() {
   }
 
   return (
-    <div className="space-y-6">
+  <div className="space-y-6 max-w-full overflow-x-hidden w-full" style={{ position: 'relative', minWidth: 0 }}>
       <h1 className="text-3xl font-bold">Letters</h1>
-      
+
       {/* Summary Cards */}
       <SummaryCards letters={letters} />
-      
-      <div className="bg-white shadow-md rounded-lg">
-        <div className="p-4 md:p-6">
+
+      <div className="bg-white shadow-md rounded-lg w-full">
+        <div className="p-4 md:p-6 min-w-0 w-full">
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
               {error}
@@ -193,17 +205,17 @@ export default function LettersList() {
             </Link>
           </div>
 
-          <div className="overflow-x-auto border border-gray-200 rounded-lg">
-            <table className="min-w-full text-sm">
+          <div className="w-full border border-gray-200 rounded-lg overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <table className="min-w-[700px] text-sm whitespace-nowrap w-full">
               <thead className="bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="w-14 px-3 py-3 text-left font-medium">SN</th>
+                  <th className="w-10 px-2 py-2 text-left font-medium">SN</th>
                   <SortableHeader label="Date" columnKey="date" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Title" columnKey="title" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="From" columnKey="from" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="To" columnKey="to" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Contact" columnKey="contact" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
-                  <th className="px-3 py-3 text-left font-medium">Attachment</th>
+                  <th className="px-2 py-2 text-left font-medium">Attachment</th>
                   <SortableHeader label="Urgency" columnKey="urgency" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Status" columnKey="status" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
                   <SortableHeader label="Bureau" columnKey="bureau" sortBy={sortBy} sortDir={sortDir} onToggle={toggleSort} />
@@ -237,19 +249,19 @@ export default function LettersList() {
                       >
                         <td className="px-3 py-3">{index + 1}</td>
                         <td className="px-3 py-3 whitespace-nowrap">{row.date}</td>
-                        <td className="px-3 py-3 whitespace-nowrap max-w-[360px]">
+                        <td className="px-2 py-2 max-w-[180px] align-top">
                           <div className="truncate" title={row.title}>{row.title}</div>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
+                        <td className="px-2 py-2 max-w-[120px] align-top">
                           <div className="truncate" title={row.from}>{row.from}</div>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
+                        <td className="px-2 py-2 max-w-[120px] align-top">
                           <div className="truncate" title={row.to}>{row.to}</div>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
+                        <td className="px-2 py-2 max-w-[120px] align-top">
                           <div className="truncate" title={row.contact}>{row.contact}</div>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap max-w-[200px]">
+                        <td className="px-2 py-2 max-w-[120px] align-top">
                           <div className="flex items-center gap-1">
                             {originalLetter?.documentMetadata ? (
                               <div className="flex items-center gap-1" title={`Attachment: ${originalLetter.documentMetadata.name}`}>
@@ -268,8 +280,8 @@ export default function LettersList() {
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-3 capitalize">{row.urgency}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-2 py-2 capitalize align-top">{row.urgency}</td>
+                        <td className="px-2 py-2 align-top">
                           <span 
                             className={`px-2 py-1 text-xs rounded-full inline-block w-fit ${
                               row.status === 'sent' 
@@ -283,8 +295,8 @@ export default function LettersList() {
                               : row.status}
                           </span>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap max-w-[220px]">
-                          <div className="max-w-[220px]">
+                        <td className="px-2 py-2 max-w-[120px] align-top">
+                          <div className="max-w-[120px]">
                             {row.status === 'sent' && row.sendHistory && row.sendHistory.length > 0 ? (
                               <div className="text-xs">
                                 {row.sendHistory.map((send, index) => (
@@ -330,12 +342,33 @@ export default function LettersList() {
       </div>
 
       {/* Email Modal */}
-      <SendEmailModal
-        isOpen={showEmailModal}
-        onClose={handleCloseModal}
-        letter={selectedLetter}
-        onStatusUpdate={handleStatusUpdate}
-      />
+      {showEmailModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          style={{ overscrollBehavior: 'contain' }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg w-full max-w-md mx-auto p-4 relative"
+            style={{
+              minHeight: '200px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              margin: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <SendEmailModal
+              isOpen={showEmailModal}
+              onClose={handleCloseModal}
+              letter={selectedLetter}
+              onStatusUpdate={handleStatusUpdate}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

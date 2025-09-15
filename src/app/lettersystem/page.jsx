@@ -72,12 +72,12 @@ export default function LetterSystemPage() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <div className="flex items-center space-x-4">
-          <button 
-            onClick={fetchDashboardData}
+          <a
+            href="/lettersystem/add-letter"
             className="px-4 py-2 bg-[#28b4b4] text-white rounded-lg hover:bg-[#229999] transition-colors"
           >
-            Refresh Data
-          </button>
+            Add Letter
+          </a>
         </div>
       </div>
 

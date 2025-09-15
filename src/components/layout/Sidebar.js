@@ -6,7 +6,7 @@ import { FileText, Plus, Mail, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 
-function SidebarContent() {
+export function SidebarContent() {
   const pathname = usePathname();
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
@@ -80,3 +80,5 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
+// Also export SidebarContent for use in TopNavigation
+// (named export above)

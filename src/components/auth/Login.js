@@ -12,7 +12,20 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, signInWithGoogle } = useAuth();
+  // Google sign-in handler
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      router.push('/lettersystem');
+    } catch (error) {
+      setError(getAuthErrorMessage(error.code));
+    } finally {
+      setLoading(false);
+    }
+  };
   const router = useRouter();
 
   const handleSubmit = async (e) => {
@@ -57,6 +70,7 @@ const Login = () => {
           </div>
           
           <form className="space-y-6" onSubmit={handleSubmit}>
+            {/* ...existing code... */}
             {error && (
               <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg">
                 <div className="flex">
@@ -140,6 +154,25 @@ const Login = () => {
               ) : (
                 'Sign In'
               )}
+            </Button>
+
+            <Button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-6 rounded-xl shadow-sm hover:bg-gray-50 transition-all duration-200 mt-2"
+              style={{ color: '#444' }}
+            >
+              <svg className="h-5 w-5" viewBox="0 0 48 48">
+                <g>
+                  <path fill="#4285F4" d="M24 9.5c3.54 0 6.36 1.53 7.82 2.81l5.77-5.77C34.64 3.55 29.74 1.5 24 1.5 14.82 1.5 6.98 7.36 3.69 15.09l6.91 5.37C12.36 14.36 17.74 9.5 24 9.5z"/>
+                  <path fill="#34A853" d="M46.1 24.5c0-1.64-.15-3.22-.42-4.74H24v9.01h12.42c-.54 2.91-2.18 5.38-4.65 7.04l7.19 5.59C43.98 37.36 46.1 31.36 46.1 24.5z"/>
+                  <path fill="#FBBC05" d="M10.6 28.46c-1.04-3.09-1.04-6.39 0-9.48l-6.91-5.37C1.64 17.64 0 20.98 0 24.5c0 3.52 1.64 6.86 3.69 9.89l6.91-5.37z"/>
+                  <path fill="#EA4335" d="M24 46.5c6.48 0 11.92-2.15 15.89-5.86l-7.19-5.59c-2.01 1.35-4.59 2.15-8.7 2.15-6.26 0-11.64-4.86-13.4-11.37l-6.91 5.37C6.98 41.64 14.82 46.5 24 46.5z"/>
+                  <path fill="none" d="M0 0h48v48H0z"/>
+                </g>
+              </svg>
+              Continue with Google
             </Button>
           </form>
         </div>

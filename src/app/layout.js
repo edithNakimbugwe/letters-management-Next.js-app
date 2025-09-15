@@ -14,13 +14,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Letter Management System",
+  title: "STI Letter Management System",
   description: "A comprehensive letter management system with user authentication",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.ico" />
+        <title>STI Letter Management System</title>
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

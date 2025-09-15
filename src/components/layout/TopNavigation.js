@@ -50,21 +50,21 @@ const TopNavigation = () => {
 
         {/* Brand/Logo */}
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-[#28b4b4] rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">L</span>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-gray-200">
+            <img src="/favicon.ico" alt="App Icon" className="w-6 h-6" />
           </div>
           <span className="hidden sm:block text-lg font-semibold text-gray-900">
-            LetterMS
+            STI Letter Management System
           </span>
         </div>
       </div>
 
       {/* Center Section - Page Title */}
-      <div className="hidden md:block">
+      {/* <div className="hidden md:block">
         <h1 className="text-lg font-semibold text-gray-900">
           Letter Management System
         </h1>
-      </div>
+      </div> */}
 
       {/* Right Section - Actions & Profile */}
       <div className="flex items-center space-x-3">
